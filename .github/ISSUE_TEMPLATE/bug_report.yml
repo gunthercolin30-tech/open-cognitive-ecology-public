@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Include the smallest sequence that reproduces the problem.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Branch or commit
+      placeholder: development-clean or commit SHA
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Include relevant logs without credentials or private data.
+

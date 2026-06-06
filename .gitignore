@@ -1,0 +1,57 @@
+__pycache__/
+*.pyc
+.env
+.DS_Store
+venv/
+.venv/
+.idea/
+.vscode/
+logs/*.log
+data/tmp/
+
+# Local snapshots and ad-hoc backups
+*.zip
+*.bak
+*.bak*
+*.backup*
+*.full_backup
+*.pre_clean_backup
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Runtime-generated histories, exports, and experiment artifacts
+archive/
+civilizational_memory_archive/
+experimental_reference/
+conversation_archives/
+degradation_test_backup/
+distributed_identity_snapshots/
+experiment_reports/
+external_memory/
+runtime_experiments/
+runtime_history/
+runtime_population/
+self_improvement_governance/
+web_dashboard_exports/
+
+# Runtime state and generated reports
+*_history.jsonl
+*_report.json
+*_summary.json
+*_state.json
+*_audit.txt
+
+# Incomplete local refinement drafts preserved in the checkpoint branch
+ontology/dependency_registry_fixed.py
+refine_autonomous_host_discovery_and_selection_orchestrator.py
+refine_civilizational_longitudinal_stability_synthesizer_r2.py
+refine_longitudinal_civilizational_autonomy_tracker_v3.py
+refine_persistent_longitudinal_memory_v2.py
+refine_reflexive_threshold_governance_active_meta_adaptation.py
+refine_reflexive_threshold_longitudinal_v2.py
+refine_trajectory_coordination_runtime.py
+refine_trajectory_policy_update_v2.py
