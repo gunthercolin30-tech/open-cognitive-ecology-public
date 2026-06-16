@@ -1,5 +1,5 @@
 # Optional runtime integrations used by visualization, documents, and NLP modules.
-matplotlib>=3.9,<4
+matplotlib>=3.11.0,<4
 python-docx>=1.1,<2
 spacy>=3.7,<4
 
