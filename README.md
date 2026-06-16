@@ -108,6 +108,9 @@ For a basic replication check:
 3. Install `requirements-dev.txt`.
 4. Run `python -m pytest`.
 
+See [docs/replication_quickstart.md](docs/replication_quickstart.md) for a
+step-by-step replication checklist.
+
 The current public release is intended to be reproducible without networked
 runtime side effects, external service credentials, or private local artifacts.
 
