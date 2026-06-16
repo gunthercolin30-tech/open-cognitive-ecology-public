@@ -16,7 +16,6 @@ DEPENDENCIES = [
     "open_ended_inquiry",
     "collective_intelligence",
     "prioritization",
-    "web_dashboard_exporter",
     "constitutional_alert_system",
 ]
 

@@ -22,8 +22,20 @@ class PersistentExternalMemoryFabric:
 
     def __init__(self, db_path: str | None = None, quota_bytes: int = 500_000_000):
         root = Path.home() / "open-cognitive-ecology"
-        memory_dir = root / "external_memory"
-        memory_dir.mkdir(parents=True, exist_ok=True)
+
+        # F17.2-R2: route future persistent memory writes to OCE_SSD when
+        # available, with local fallback when the SSD is absent.
+        try:
+            from ontology.civilizational_storage_router import CivilizationalStorageRouter
+            router = CivilizationalStorageRouter(root=root)
+            memory_dir = router.route_directory("external_memory", category="memory")
+            self.storage_router = router
+            self.storage_mode = "ssd" if router.ssd_available() else "local_fallback"
+        except Exception:
+            memory_dir = root / "external_memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            self.storage_router = None
+            self.storage_mode = "legacy_local"
 
         self.db_path = Path(db_path) if db_path else (memory_dir / "memory.db")
         self.quota_bytes = max(int(quota_bytes), self.MIN_EFFECTIVE_QUOTA_BYTES)

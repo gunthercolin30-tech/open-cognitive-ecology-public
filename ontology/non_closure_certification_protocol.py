@@ -9,7 +9,6 @@ PRIMITIVE = "non_closure_certification_protocol"
 
 DEPENDENCIES = [
     "architectural_non_closure_index",
-    "constitutional_governance_report_generator",
     "scientific_consolidation_and_zenodo_publication_suite",
 ]
 

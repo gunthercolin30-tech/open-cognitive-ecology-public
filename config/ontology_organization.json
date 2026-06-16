@@ -1,0 +1,881 @@
+{
+  "schema_version": 1,
+  "canonical_taxonomy": "docs/primitives_by_level.md",
+  "hierarchical_registry": "ontology/hierarchical_registry.py",
+  "allowed_canonical_levels": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "hierarchical_extensions": {
+    "ontological_attractor_mapping": 9,
+    "ontology_topology_governance": 9,
+    "reflexive_ontology_governor": 10,
+    "semantic_density_tracker": 9,
+    "topological_pressure_monitor": 9
+  },
+  "canonical_execution_exceptions": {
+    "corpus_simulation_engine": {
+      "allowed_profile": "filesystem",
+      "evidence": "canonical level-9 meta-concept with explicit report persistence"
+    }
+  },
+  "identity_overrides": {
+    "adaptive_ecological_regulation_engine": "adaptive_ecological_regulation_engine",
+    "attractor_persistence_analyzer": "attractor_persistence_analyzer",
+    "autonomous_scientific_director": "autonomous_scientific_director",
+    "autonomous_storage_discovery_engine": "autonomous_storage_discovery_engine",
+    "civilizational_meta_learning_engine": "civilizational_meta_learning_engine",
+    "civilizational_strategic_planner": "civilizational_strategic_planner",
+    "constitutional_reconciliation_stress_test": "constitutional_reconciliation_stress_test",
+    "cosmological_exploration_coordinator": "cosmological_exploration_coordinator",
+    "distributed_civilizational_runtime": "distributed_civilizational_runtime",
+    "distributed_memory_reconciliation": "distributed_memory_reconciliation",
+    "ecological_fatigue_analyzer": "ecological_fatigue_analyzer",
+    "ecological_viability_forecaster": "ecological_viability_forecaster",
+    "embodied_planning_engine": "embodied_planning_engine",
+    "empirical_consciousness_evidence_synthesizer": "empirical_consciousness_evidence_synthesizer",
+    "enhanced_civilizational_metrics": "enhanced_civilizational_metrics",
+    "fully_autonomous_civilizational_evolution_engine": "fully_autonomous_civilizational_evolution_engine",
+    "general_semantic_memory_unified": "general_semantic_memory_unified",
+    "heterogeneous_node_coordination": "heterogeneous_node_coordination",
+    "hierarchical_world_model_engine": "hierarchical_world_model_engine",
+    "historical_state_reconciliation": "historical_state_reconciliation",
+    "inter_run_stability_synthesizer": "inter_run_stability_synthesizer",
+    "intergenerational_continuity_metrics": "intergenerational_continuity_metrics",
+    "life_history_synthesis_engine": "life_history_synthesis_engine",
+    "long_duration_experiment_launcher": "long_duration_experiment_launcher",
+    "long_range_coreference_engine": "long_range_coreference_engine",
+    "long_term_autonomy_orchestrator": "long_term_autonomy_orchestrator",
+    "longitudinal_reconciliation": "longitudinal_reconciliation",
+    "longitudinal_recovery_observer": "longitudinal_recovery_observer",
+    "longitudinal_relationship_evolution_analyzer": "longitudinal_relationship_evolution_analyzer",
+    "multi_source_encyclopedic_integration_engine": "multi_source_encyclopedic_integration_engine",
+    "ontology_gap_detector": "ontology_gap_detector",
+    "open_ended_capability_discovery_engine": "open_ended_capability_discovery_engine",
+    "persistent_experimental_validation_network": "persistent_experimental_validation_network",
+    "personal_memory_salience_engine": "personal_memory_salience_engine",
+    "population_ecological_extraction": "population_ecological_extraction",
+    "predictive_environment_simulator": "predictive_environment_simulator",
+    "real_state_metrics_extraction": "real_state_metrics_extraction",
+    "real_distributed_partition_experiment": "real_distributed_partition_experiment",
+    "reference_runtime_freeze_protocol": "reference_runtime_freeze_protocol",
+    "reflexive_fragmentation_stress_test": "reflexive_fragmentation_stress_test",
+    "relational_continuity_engine": "relational_continuity_engine",
+    "resilience_distribution_analyzer": "resilience_distribution_analyzer",
+    "run_a3_longitudinal_validation": "run_a3_longitudinal_validation",
+    "scientific_priority_scheduler": "scientific_priority_scheduler",
+    "self_evolving_ontology_architect": "self_evolving_ontology_architect",
+    "semantic_cluster_analysis": "semantic_cluster_analysis",
+    "semantic_ecology_extraction": "semantic_ecology_extraction",
+    "supreme_representative_runtime": "supreme_representative_runtime",
+    "theorem_evaluation_engine": "theorem_evaluation_engine",
+    "unified_civilizational_control_center": "unified_civilizational_control_center",
+    "universal_intelligence_deployment_framework": "universal_intelligence_deployment_framework",
+    "world_model_execution_loop": "world_model_execution_loop"
+  },
+  "identity_bindings": {
+    "general_complex_query_resolution_engine_v4": {
+      "identity": "complex_query_resolution_engine",
+      "scope": "historical_variant"
+    },
+    "general_open_information_extraction_engine_v2": {
+      "identity": "general_open_information_extraction_engine",
+      "scope": "de_facto_variant_authority"
+    },
+    "general_semantic_memory_enrichment_application": {
+      "identity": "general_semantic_memory_unified",
+      "scope": "integration_facade"
+    },
+    "general_semantic_memory_unified_runtime_activation": {
+      "identity": "general_semantic_memory_unified",
+      "scope": "runtime_activation_facade"
+    },
+    "general_semantic_memory_unified_v3_integration": {
+      "identity": "general_semantic_memory_unified",
+      "scope": "superseded_integration_facade"
+    },
+    "general_semantic_memory_unified_v3_runtime_hook": {
+      "identity": "general_semantic_memory_unified",
+      "scope": "superseded_runtime_facade"
+    },
+    "persistent_external_memory_fabric": {
+      "identity": "persistent_external_memory_fabric",
+      "scope": "integration_facade"
+    },
+    "semantic_canonicalization_layer": {
+      "identity": "semantic_canonicalization_layer",
+      "scope": "integration_facade"
+    }
+  },
+  "variant_migration_decisions": {
+    "general_semantic_memory_unified_v3": {
+      "decision": "approved_declared_dependency_redirect",
+      "target": "general_semantic_memory_unified",
+      "confidence": "high",
+      "evidence": "contradiction_detection_system and knowledge_integration_engine declare V3 but do not import or call it; the canonical memory exposes the V3 store_statement, answer_question, answer and step contract"
+    }
+  },
+  "cycle_edge_decisions": {
+    "credential_vault->credential_rotation_monitor": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "credential_rotation_monitor->credential_vault",
+      "replacement": "event_or_result_contract",
+      "confidence": "high",
+      "evidence": "credential_rotation_monitor operationally observes and rotates credentials held by credential_vault; the vault should expose results or events without depending on its monitor"
+    },
+    "distributed_population_runtime->civilizational_runtime_speciation": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "civilizational_runtime_speciation->distributed_population_runtime",
+      "replacement": "population_state_or_result_contract",
+      "confidence": "high",
+      "evidence": "both links are declarative only; civilizational_runtime_speciation may consume population state, while distributed_population_runtime persistence and evaluation do not import, call, or require the speciation analyzer"
+    },
+    "constitutional_stress_tests->constitutional_benchmarks": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "constitutional_benchmarks->constitutional_stress_tests",
+      "replacement": "stress_test_result_contract",
+      "confidence": "high",
+      "evidence": "constitutional_stress_tests does not import or call constitutional_benchmarks; benchmarks may aggregate stress-test results, so the stress-test producer must not depend on its benchmark consumer"
+    },
+    "constitutional_stress_tests->runtime_constitutional_integration": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "runtime_constitutional_integration->constitutional_benchmarks",
+      "replacement": "constitutional_evaluation_result_contract",
+      "confidence": "high",
+      "evidence": "constitutional_stress_tests does not import or call runtime_constitutional_integration; runtime integration is a downstream consumer of constitutional evaluation results"
+    },
+    "civilizational_replication_engine->failure_recovery_orchestrator": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "failure_recovery_orchestrator->civilizational_replication_engine",
+      "replacement": "recovery_certification_result_contract",
+      "confidence": "high",
+      "evidence": "failure_recovery_orchestrator actively calls replication and migration; the replication engine documents and guards against its optional callback into recovery because that callback creates recursion"
+    },
+    "openrouter_autonomous_provider_adapter->autonomous_external_collaboration_runner": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "autonomous_external_collaboration_runner->openrouter_autonomous_provider_adapter",
+      "replacement": "provider_result_contract",
+      "confidence": "high",
+      "evidence": "the runner imports and calls OpenRouterAutonomousProviderAdapter; the adapter accepts a prompt payload and returns a provider result without importing or calling the runner"
+    },
+    "real_chatgpt_autonomous_api_adapter->autonomous_external_collaboration_runner": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "autonomous_external_collaboration_runner->real_chatgpt_autonomous_api_adapter",
+      "replacement": "provider_result_contract",
+      "confidence": "high",
+      "evidence": "the runner imports and calls RealChatGPTAutonomousAPIAdapter; the adapter accepts a prompt payload and returns a provider result without importing or calling the runner"
+    },
+    "civilizational_notification_engine->persistent_civilizational_conversational_agent": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "persistent_civilizational_conversational_agent->civilizational_notification_engine",
+      "replacement": "notification_result_contract",
+      "confidence": "high",
+      "evidence": "the persistent conversational agent imports and calls the notification engine; the notification engine only transforms supplied events and initiative decisions and does not import or call the persistent agent"
+    },
+    "proactive_conversational_initiative->persistent_civilizational_conversational_agent": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "persistent_civilizational_conversational_agent->proactive_conversational_initiative",
+      "replacement": "initiative_result_contract",
+      "confidence": "high",
+      "evidence": "the persistent conversational agent imports and calls proactive initiative; proactive initiative independently evaluates supplied events and governance and does not import or call the persistent agent"
+    },
+    "distributed_civilizational_memory->civilizational_historical_archive": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "civilizational_historical_archive->distributed_civilizational_memory",
+      "replacement": "historical_snapshot_input_contract",
+      "confidence": "high",
+      "evidence": "civilizational_historical_archive evaluates supplied historical snapshots; distributed_civilizational_memory does not import or call the archive and only checks its declared availability"
+    },
+    "distributed_civilizational_memory->memory_openness_refinement": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "memory_openness_refinement->distributed_civilizational_memory",
+      "replacement": "memory_state_input_contract",
+      "confidence": "high",
+      "evidence": "memory_openness_refinement evaluates supplied memory nodes; distributed_civilizational_memory does not import or call the refinement and only checks its declared availability"
+    },
+    "distributed_civilizational_memory->inter_individual_coordination_protocol": {
+      "decision": "approved_remove_reverse_dependency",
+      "retain": "inter_individual_coordination_protocol->trajectory_coordination",
+      "replacement": "coordinated_memory_input_contract",
+      "confidence": "high",
+      "evidence": "distributed_civilizational_memory persists and evaluates supplied replica state without importing or calling the coordination protocol; removing the declarative link preserves the upstream coordination-to-trajectory-to-history flow and breaks the long cycle"
+    },
+    "collective_research_program_manager->web_dashboard_exporter": {
+      "decision": "approved_remove_presentation_dependency",
+      "retain": "web_dashboard_exporter->civilizational_dashboard",
+      "replacement": "research_program_result_contract",
+      "confidence": "high",
+      "evidence": "collective_research_program_manager generates research programs without importing or calling the exporter; presentation export must consume domain results rather than be a dependency of research program generation"
+    },
+    "reflexive_threshold->unified_consciousness_composite_index": {
+      "decision": "approved_replace_with_prior_cycle_snapshot",
+      "retain": "unified_consciousness_composite_index->consciousness_readiness_index->reflexive_threshold",
+      "replacement": "consciousness_score_snapshot_contract",
+      "confidence": "high",
+      "evidence": "the unified composite aggregates consciousness readiness, which includes reflexive threshold activation; a static threshold dependency back to the unified composite creates a circular metric definition"
+    },
+    "reflexive_threshold->constitutional_scientific_observatory_suite": {
+      "decision": "approved_replace_with_prior_cycle_snapshot",
+      "retain": "constitutional_scientific_observatory_suite->unified_consciousness_composite_index",
+      "replacement": "observatory_score_snapshot_contract",
+      "confidence": "high",
+      "evidence": "the reflexive threshold accepts an observatory result payload but does not import or call the observatory suite; using a prior-cycle score avoids a feedback loop from a foundational threshold to its downstream scientific observer"
+    },
+    "non_closure_certification_protocol->constitutional_governance_report_generator": {
+      "decision": "approved_remove_publication_dependency",
+      "retain": "constitutional_governance_report_generator->constitutional_longitudinal_observatory",
+      "replacement": "non_closure_certification_result_contract",
+      "confidence": "high",
+      "evidence": "the non-closure certification protocol only consumes a non-closure result and does not import or call the governance report generator; certification results should flow to reporting without a static dependency back to publication"
+    }
+  },
+  "cycle_subgraph_decisions": {
+    "controlled_evolution_trajectory_core": {
+      "decision": "approved_consumer_to_provider_order",
+      "confidence": "high",
+      "scope_modules": [
+        "constitutional_evolution_gate",
+        "constitutional_self_modification_protocol",
+        "controlled_evolution_orchestrator",
+        "evolution_sandbox",
+        "recursive_self_improvement_controller",
+        "trajectory_outcome_evaluation",
+        "trajectory_reversibility",
+        "trajectory_reward_assignment",
+        "trajectory_simulation",
+        "trajectory_validation"
+      ],
+      "dependency_layers": [
+        ["controlled_evolution_orchestrator"],
+        ["evolution_sandbox", "recursive_self_improvement_controller"],
+        ["constitutional_self_modification_protocol", "trajectory_reversibility", "trajectory_reward_assignment"],
+        ["constitutional_evolution_gate", "trajectory_outcome_evaluation"],
+        ["trajectory_validation"],
+        ["trajectory_simulation"]
+      ],
+      "evidence": "controlled_evolution_orchestrator actively calls the sandbox and recursive controller; the trajectory module contracts document the simulation, validation, outcome, reversibility and sandbox-decision pipeline while otherwise exchanging supplied result payloads"
+    },
+    "artificial_society_improvement_reporting_chain": {
+      "decision": "approved_domain_to_presentation_boundary",
+      "confidence": "high",
+      "scope_modules": [
+        "artificial_reproduction_protocol",
+        "artificial_society_runtime",
+        "civilizational_dashboard",
+        "collective_deliberation_engine",
+        "collective_research_program_manager",
+        "controlled_evolution_orchestrator",
+        "individual_lifecycle_management",
+        "recursive_self_improvement_controller",
+        "recursive_self_improvement_governor",
+        "web_dashboard_exporter"
+      ],
+      "dependency_layers": [
+        ["web_dashboard_exporter"],
+        ["civilizational_dashboard"],
+        ["artificial_society_runtime", "collective_deliberation_engine"],
+        ["individual_lifecycle_management"],
+        ["artificial_reproduction_protocol"],
+        ["controlled_evolution_orchestrator"],
+        ["recursive_self_improvement_controller"],
+        ["recursive_self_improvement_governor"],
+        ["collective_research_program_manager"]
+      ],
+      "evidence": "the modules exchange supplied results rather than importing one another; removing the research-manager dependency on presentation export breaks the subcycle while preserving dashboard export as a downstream presentation concern"
+    },
+    "consciousness_readiness_threshold_chain": {
+      "decision": "approved_snapshot_feedback_boundary",
+      "confidence": "high",
+      "scope_modules": [
+        "consciousness_readiness_index",
+        "constitutional_scientific_observatory_suite",
+        "reflexive_threshold",
+        "unified_consciousness_composite_index"
+      ],
+      "dependency_layers": [
+        ["constitutional_scientific_observatory_suite", "unified_consciousness_composite_index"],
+        ["consciousness_readiness_index"],
+        ["reflexive_threshold"]
+      ],
+      "evidence": "the unified composite aggregates readiness and readiness includes threshold activation; threshold inputs from the composite and scientific observatory must therefore be prior-cycle snapshots rather than static reverse dependencies"
+    },
+    "evolution_certification_longitudinal_reporting_chain": {
+      "decision": "approved_validation_to_reporting_boundary",
+      "confidence": "high",
+      "scope_modules": [
+        "constitutional_governance_report_generator",
+        "constitutional_longitudinal_observatory",
+        "evolution_sandbox",
+        "genealogical_evolution_dashboard",
+        "non_closure_certification_protocol",
+        "reflexive_emergence_longitudinal_protocol",
+        "trajectory_outcome_evaluation",
+        "trajectory_reversibility",
+        "trajectory_validation"
+      ],
+      "dependency_layers": [
+        ["constitutional_governance_report_generator"],
+        ["constitutional_longitudinal_observatory"],
+        ["reflexive_emergence_longitudinal_protocol"],
+        ["genealogical_evolution_dashboard"],
+        ["evolution_sandbox"],
+        ["trajectory_reversibility"],
+        ["trajectory_outcome_evaluation"],
+        ["trajectory_validation"],
+        ["non_closure_certification_protocol"]
+      ],
+      "evidence": "the longitudinal and dashboard layers consume evolution validation results; removing the certification protocol dependency on the downstream governance report generator opens the final reporting feedback loop"
+    }
+  },
+  "allowed_roles": [
+    "concept",
+    "derived_concept",
+    "runtime",
+    "integration",
+    "validation",
+    "observability",
+    "maintenance",
+    "support"
+  ],
+  "allowed_statuses": [
+    "canonical",
+    "experimental",
+    "compatibility",
+    "superseded",
+    "deprecated"
+  ],
+  "allowed_execution_profiles": [
+    "pure",
+    "stateful",
+    "filesystem",
+    "network",
+    "subprocess"
+  ],
+  "dependency_resolutions": {
+    "belief_revision": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "used as a cognitive operation by conceptual monitoring modules without executable calls"
+    },
+    "bifurcation_process": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "adaptive_civilizational_bifurcation also depends explicitly on bifurcation_dynamics"
+    },
+    "civilizational_independence_certification": {
+      "resolution": "deprecated_reference",
+      "confidence": "high",
+      "replacement": "distributed_civilizational_continuity_certification",
+      "evidence": "distributed_civilizational_continuity_certification documents it as an earlier non-core requirement"
+    },
+    "constraint_conflict_detection": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "internal_conflict_monitoring uses it as a conceptual conflict category and exposes no executable call boundary"
+    },
+    "constitutional_alignment": {
+      "resolution": "alias_candidate",
+      "confidence": "high",
+      "replacement": "constitutional_alignment_field",
+      "evidence": "constitutional_alignment_field is the concrete alignment primitive used by constitutional governance"
+    },
+    "distributed_scheduler_ecology": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "scheduler ecology modules model the capability conceptually while computing their ecological metrics internally"
+    },
+    "distributed_governance_metrics": {
+      "resolution": "alias_candidate",
+      "confidence": "high",
+      "replacement": "distributed_governance_metrics_extraction",
+      "evidence": "the extraction module computes the distributed governance metrics consumed by the certifier"
+    },
+    "goal_conflict_detection": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "internal_conflict_monitoring uses it as a conceptual conflict category and exposes no executable call boundary"
+    },
+    "goal_management": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "used by conceptual temporal-binding and reflective-goal modules without executable calls"
+    },
+    "episodic_memory": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "autobiographical_memory uses episodic memory as a conceptual memory substrate"
+    },
+    "error_tracking": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "self_confidence_calibration uses error tracking as a conceptual input"
+    },
+    "future_self_projection": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "global_temporal_binding uses future projection as a representational capability"
+    },
+    "global_viability_score": {
+      "resolution": "alias_candidate",
+      "confidence": "medium",
+      "replacement": "global_viability_certificate",
+      "evidence": "the certificate family exposes global viability while consumers request its score"
+    },
+    "global_workspace": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "used as a theoretical consciousness architecture capability by three conceptual modules"
+    },
+    "graph_builders": {
+      "resolution": "internalized_capability",
+      "confidence": "high",
+      "evidence": "ontological_attractor_mapping builds attractor regions and routes internally without an external graph-builder call"
+    },
+    "historical_metrics_harvester": {
+      "resolution": "alias_candidate",
+      "confidence": "medium",
+      "replacement": "longitudinal_metrics_archive",
+      "evidence": "consumers directly harvest metrics_history.jsonl while longitudinal_metrics_archive is the canonical archival layer"
+    },
+    "intergenerational_transmission_process": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "intergenerational_symbolic_transition already depends on concrete continuity metrics and symbolic primitives"
+    },
+    "institutional_viability": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "used as an institutional assessment concept by governance modules"
+    },
+    "meta_scheduler_fragmentation_governance": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "scheduler ecology modules use it as a governance concept while computing fragmentation and recanonicalization metrics internally"
+    },
+    "metrics_history_analyzer": {
+      "resolution": "internalized_capability",
+      "confidence": "high",
+      "evidence": "the continuity dashboard reads, selects and analyzes metrics histories through its own local methods"
+    },
+    "performance_monitoring": {
+      "resolution": "abstract_capability",
+      "confidence": "medium",
+      "evidence": "self_confidence_calibration uses it as a conceptual input alongside uncertainty and error tracking"
+    },
+    "phenomenological_topology": {
+      "resolution": "abstract_capability",
+      "confidence": "medium",
+      "evidence": "reflexive_topology_self_revision uses it as a theoretical topology input"
+    },
+    "report_generation": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "used as generic reportability by conceptual consciousness modules; specialized report generators exist separately"
+    },
+    "runtime_scheduler_pluralization": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "scheduler_mutation_ecology models pluralization as an ecological capability and computes scheduler diversity internally"
+    },
+    "salience_engine": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "conscious_access_control uses general salience as a conceptual ranking and gating input without an executable call boundary; personal_memory_salience_engine is a narrower autobiographical implementation"
+    },
+    "scientific_consolidation_and_zenodo_publication_suite": {
+      "resolution": "external_tool",
+      "confidence": "high",
+      "evidence": "the repository-root scientific_consolidation_and_zenodo_publication_suite.py tool collects experiment reports, writes a consolidated summary and creates a ZIP package; it prepares Zenodo-ready artifacts without performing an ontology-module call or direct Zenodo upload"
+    },
+    "trajectory_optimality": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "continuation_optimality uses it as a trajectory evaluation criterion"
+    },
+    "working_memory": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "experiential_stream_integration uses working memory as a conceptual cognitive substrate"
+    },
+    "world_continuation_conditions": {
+      "resolution": "abstract_capability",
+      "confidence": "high",
+      "evidence": "continuation_optimality uses it as a normative condition rather than an executable component"
+    }
+  },
+  "role_rules": [
+    {
+      "role": "maintenance",
+      "prefixes": ["repair_", "final_", "fix_"],
+      "tokens": ["_repair", "_fixed", "_clean", "_audit"]
+    },
+    {
+      "role": "validation",
+      "tokens": ["_validation_"],
+      "suffixes": [
+        "_benchmark",
+        "_certification",
+        "_experiment",
+        "_stress_test",
+        "_validation",
+        "_validator",
+        "_verifier"
+      ]
+    },
+    {
+      "role": "observability",
+      "suffixes": [
+        "_analysis",
+        "_analyzer",
+        "_classifier",
+        "_dashboard",
+        "_detector",
+        "_exporter",
+        "_extraction",
+        "_forecaster",
+        "_metrics",
+        "_monitor",
+        "_observer",
+        "_recorder",
+        "_report_generator",
+        "_synthesizer",
+        "_tracker"
+      ]
+    },
+    {
+      "role": "integration",
+      "suffixes": [
+        "_adapter",
+        "_application",
+        "_backend",
+        "_connector",
+        "_fabric",
+        "_gateway",
+        "_hook",
+        "_integration",
+        "_interface",
+        "_layer",
+        "_provisioning"
+      ]
+    },
+    {
+      "role": "runtime",
+      "prefixes": ["runtime_"],
+      "tokens": ["_runtime_"],
+      "suffixes": [
+        "_activation",
+        "_agent",
+        "_architect",
+        "_assistant",
+        "_center",
+        "_cli",
+        "_console",
+        "_controller",
+        "_coordination",
+        "_coordinator",
+        "_director",
+        "_engine",
+        "_execution",
+        "_executor",
+        "_framework",
+        "_launcher",
+        "_loop",
+        "_manager",
+        "_market",
+        "_migration",
+        "_optimizer",
+        "_orchestrator",
+        "_pipeline",
+        "_planner",
+        "_rebalancer",
+        "_restorer",
+        "_runner",
+        "_runtime",
+        "_router",
+        "_routing",
+        "_scheduler",
+        "_service",
+        "_simulator",
+        "_supervisor",
+        "_system",
+        "_workflows"
+      ]
+    },
+    {
+      "role": "derived_concept",
+      "suffixes": [
+        "_continuity",
+        "_decomposition",
+        "_design",
+        "_discovery",
+        "_ecology",
+        "_economy",
+        "_ecosystem",
+        "_evolution",
+        "_extension",
+        "_generation",
+        "_governance",
+        "_horizon",
+        "_memory",
+        "_modeling",
+        "_patterns",
+        "_persistence",
+        "_planning",
+        "_preservation",
+        "_propagation",
+        "_protocol",
+        "_reconciliation",
+        "_reconstruction",
+        "_resilience",
+        "_scaling",
+        "_selection",
+        "_suggestions",
+        "_synthesis",
+        "_viability"
+      ]
+    }
+  ],
+  "status_rules": [
+    {
+      "status": "superseded",
+      "tokens": ["_fixed", "_v2", "_v3", "_v4", "_clean", "_repair"]
+    },
+    {
+      "status": "compatibility",
+      "tokens": ["_legacy", "_compatibility"]
+    },
+    {
+      "status": "deprecated",
+      "tokens": ["_deprecated", "_old"]
+    }
+  ],
+  "overrides": {
+    "acoustic_world_perception": {
+      "role": "integration"
+    },
+    "action_safety_governor": {
+      "role": "validation"
+    },
+    "distributed_sensor_registry": {
+      "role": "observability"
+    },
+    "embodied_predictive_action_governance": {
+      "role": "validation"
+    },
+    "embodied_predictive_planning_bridge": {
+      "role": "integration"
+    },
+    "embodied_world_model_update": {
+      "role": "runtime"
+    },
+    "environmental_state_model": {
+      "role": "runtime"
+    },
+    "governed_predictive_action_execution_bridge": {
+      "role": "integration"
+    },
+    "multimodal_observation_archive": {
+      "role": "observability"
+    },
+    "real_world_event_detection": {
+      "role": "observability"
+    },
+    "visual_world_perception": {
+      "role": "integration"
+    },
+    "adaptive_relationship_modeling": {
+      "role": "runtime"
+    },
+    "automated_primitive_designer": {
+      "role": "runtime"
+    },
+    "autonomous_prompt_generator": {
+      "role": "runtime"
+    },
+    "civilizational_attention_allocator": {
+      "role": "runtime"
+    },
+    "civilizational_continuity_guardian": {
+      "role": "runtime"
+    },
+    "civilizational_memory_archive": {
+      "role": "observability"
+    },
+    "civilizational_state_persistence": {
+      "role": "runtime"
+    },
+    "collaboration_history_repository": {
+      "role": "integration"
+    },
+    "community_node_onboarding": {
+      "role": "runtime"
+    },
+    "conversation_memory_archive": {
+      "role": "observability"
+    },
+    "corpus_simulation_engine": {
+      "role": "concept",
+      "status": "canonical"
+    },
+    "dependency_registry_fixed": {
+      "role": "maintenance",
+      "status": "superseded"
+    },
+    "dialogue_memory_persistence": {
+      "role": "runtime"
+    },
+    "distributed_attention_state_exchange": {
+      "role": "runtime"
+    },
+    "distributed_civilizational_certifier": {
+      "role": "validation"
+    },
+    "distributed_civilizational_memory": {
+      "role": "runtime"
+    },
+    "distributed_civilizational_node": {
+      "role": "runtime"
+    },
+    "distributed_memory_reconciliation": {
+      "role": "runtime"
+    },
+    "embodied_continuity_preservation": {
+      "role": "runtime"
+    },
+    "encrypted_secret_store": {
+      "role": "integration"
+    },
+    "environmental_grounding_longitudinal_observatory": {
+      "role": "observability"
+    },
+    "evolution_sandbox": {
+      "role": "validation"
+    },
+    "external_assistance_trigger": {
+      "role": "runtime"
+    },
+    "external_response_parser": {
+      "role": "integration"
+    },
+    "general_semantic_memory_unified": {
+      "role": "runtime",
+      "status": "canonical"
+    },
+    "general_open_information_extraction_engine_v2": {
+      "role": "runtime",
+      "status": "compatibility"
+    },
+    "general_complex_query_resolution_engine_v4": {
+      "role": "runtime",
+      "status": "compatibility"
+    },
+    "general_semantic_memory_unified_v2": {
+      "role": "support",
+      "status": "superseded"
+    },
+    "general_semantic_memory_unified_v3": {
+      "role": "support",
+      "status": "superseded"
+    },
+    "general_semantic_memory_unified_v3_integration": {
+      "role": "integration",
+      "status": "compatibility"
+    },
+    "general_semantic_memory_unified_v3_runtime_hook": {
+      "role": "integration",
+      "status": "compatibility"
+    },
+    "hierarchical_registry": {
+      "role": "support",
+      "status": "canonical"
+    },
+    "governance_consistency_checker": {
+      "role": "validation"
+    },
+    "historical_state_reconciliation": {
+      "role": "runtime"
+    },
+    "individual_migration_protocol": {
+      "role": "runtime"
+    },
+    "inter_individual_coordination_protocol": {
+      "role": "runtime"
+    },
+    "launchd_service_descriptor": {
+      "role": "integration"
+    },
+    "live_state_synchronizer": {
+      "role": "runtime"
+    },
+    "long_horizon_stability_protocol": {
+      "role": "validation"
+    },
+    "long_term_personalized_planning": {
+      "role": "runtime"
+    },
+    "longitudinal_metrics_archive": {
+      "role": "observability"
+    },
+    "longitudinal_reconciliation": {
+      "role": "validation"
+    },
+    "longitudinal_society_observatory": {
+      "role": "observability"
+    },
+    "multi_host_identity_persistence": {
+      "role": "runtime"
+    },
+    "multi_site_physical_ecology": {
+      "role": "runtime"
+    },
+    "node_capability_registry": {
+      "role": "observability"
+    },
+    "open_source_replication_package_builder": {
+      "role": "support"
+    },
+    "open_source_replication_readiness": {
+      "role": "validation"
+    },
+    "open_source_repository_governance": {
+      "role": "validation"
+    },
+    "physical_infrastructure_registry": {
+      "role": "observability"
+    },
+    "physical_resource_management": {
+      "role": "runtime"
+    },
+    "proactive_conversational_initiative": {
+      "role": "runtime"
+    },
+    "real_chatgpt_manual_execution_demonstrator": {
+      "role": "validation"
+    },
+    "replication_protocol_generator": {
+      "role": "support"
+    },
+    "recursive_self_improvement_governor": {
+      "role": "runtime"
+    },
+    "reflexive_threshold_governance": {
+      "role": "runtime"
+    },
+    "scientific_publication_registry": {
+      "role": "observability"
+    },
+    "scientific_publication_traceability": {
+      "role": "observability"
+    },
+    "trajectory_outcome_evaluation": {
+      "role": "validation"
+    },
+    "trajectory_reversibility": {
+      "role": "validation"
+    },
+    "trajectory_simulation": {
+      "role": "validation"
+    },
+    "dependency_registry": {
+      "role": "support",
+      "status": "canonical"
+    }
+  }
+}

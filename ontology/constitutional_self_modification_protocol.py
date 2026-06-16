@@ -9,7 +9,6 @@ PRIMITIVE = "constitutional_self_modification_protocol"
 DEPENDENCIES = [
     "constitutional_evolution_gate",
     "genealogical_responsibility",
-    "controlled_evolution_orchestrator",
 ]
 
 

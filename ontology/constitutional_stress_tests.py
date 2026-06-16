@@ -7,8 +7,6 @@ from __future__ import annotations
 PRIMITIVE = "constitutional_stress_tests"
 
 DEPENDENCIES = [
-    "runtime_constitutional_integration",
-    "constitutional_benchmarks",
     "constitutional_integrity_index",
 ]
 

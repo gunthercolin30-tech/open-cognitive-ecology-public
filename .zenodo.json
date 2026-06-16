@@ -1,0 +1,28 @@
+{
+  "title": "Open Cognitive Ecology",
+  "upload_type": "software",
+  "description": "Open Cognitive Ecology is an experimental computational architecture for the empirical validation of functional reflexive threshold properties in distributed artificial civilizations.",
+  "creators": [
+    {
+      "name": "Gunther, Colin"
+    }
+  ],
+  "keywords": [
+    "open cognitive ecology",
+    "constraint-based systems",
+    "reflexive threshold",
+    "artificial civilization",
+    "non-closure",
+    "external validation",
+    "replication"
+  ],
+  "license": "MIT",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "relation": "isSupplementTo",
+      "identifier": "https://github.com/gunthercolin30-tech/open-cognitive-ecology-public",
+      "scheme": "url"
+    }
+  ]
+}

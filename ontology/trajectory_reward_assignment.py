@@ -12,9 +12,7 @@ DESCRIPTION = (
     "adaptive learning."
 )
 
-DEPENDENCIES = [
-    "trajectory_outcome_evaluation",
-]
+DEPENDENCIES = []
 
 
 class TrajectoryRewardAssignment:
@@ -27,4 +25,3 @@ class TrajectoryRewardAssignment:
             "primitive": self.PRIMITIVE,
             "status": "active",
         }
-

@@ -9,7 +9,6 @@ PRIMITIVE = "constitutional_evolution_gate"
 DEPENDENCIES = [
     "constitutional_longitudinal_observatory",
     "runtime_constitutional_integration",
-    "controlled_evolution_orchestrator",
 ]
 
 

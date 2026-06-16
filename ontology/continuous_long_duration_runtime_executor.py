@@ -104,6 +104,27 @@ class ContinuousLongDurationRuntimeExecutor:
                     + "\n"
                 )
 
+            # E1 METRICS HISTORY RECORDER HOOK
+            try:
+                from ontology.metrics_history_recorder import record_metrics
+                record_metrics(
+                    {
+                        "primitive": "continuous_long_duration_runtime_executor",
+                        "iteration": iterations,
+                        "metrics": metrics,
+                        "validation_status": "observed",
+                        "governance_status": "governed",
+                        "runtime_status": "operational",
+                        "error_count": 0,
+                    },
+                    primitive="continuous_long_duration_runtime_executor",
+                    validation_status="observed",
+                    governance_status="governed",
+                    runtime_status="operational",
+                )
+            except Exception:
+                pass
+
             alert_result = alerter.step(metrics)
 
             all_alerts.extend(

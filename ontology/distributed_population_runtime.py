@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "multi_lineage_topology",
     "distributed_historical_branching",
     "distributed_attractor_speciation",
-    "civilizational_runtime_speciation",
     "distributed_pluralistic_stability",
     "distributed_open_ended_pluralistic_evolution",
     "inter_lineage_symbolic_exchange",

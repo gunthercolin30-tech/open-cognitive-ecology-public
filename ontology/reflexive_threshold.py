@@ -9,8 +9,6 @@ PRIMITIVE_NAME = "REFLEXIVE_THRESHOLD"
 MATURITY_LEVEL = "FOUNDATIONAL_COMPLETE"
 
 DEPENDENCIES = [
-    "constitutional_scientific_observatory_suite",
-    "unified_consciousness_composite_index",
     "consciousness_longitudinal_stability_analyzer",
     "inter_run_stability_synthesizer",
     "meta_cognition",
@@ -94,6 +92,8 @@ class ReflexiveThreshold:
                 "unified_consciousness_composite_index": consciousness_score,
                 "longitudinal_stability_index": longitudinal_score,
                 "inter_run_stability_index": inter_run_score,
+                "observatory_input_contract": "prior_cycle_snapshot",
+                "consciousness_input_contract": "prior_cycle_snapshot",
                 "dependencies": DEPENDENCIES,
             },
         }

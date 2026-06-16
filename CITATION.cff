@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+title: Open Cognitive Ecology
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Gunther
+    given-names: Colin
+repository-code: "https://github.com/gunthercolin30-tech/open-cognitive-ecology-public"
+keywords:
+  - open cognitive ecology
+  - constraint-based systems
+  - reflexive threshold
+  - artificial civilization
+  - non-closure
+license: MIT
