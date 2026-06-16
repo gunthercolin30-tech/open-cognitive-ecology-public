@@ -25,7 +25,7 @@ archives are intentionally excluded from active development commits.
 
 ## Development
 
-Open Cognitive Ecology supports Python 3.9 and newer.
+Open Cognitive Ecology supports Python 3.10 and newer.
 
 ```bash
 python -m venv .venv
