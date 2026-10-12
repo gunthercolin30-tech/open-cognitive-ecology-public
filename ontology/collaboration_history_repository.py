@@ -17,6 +17,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from ontology.governed_evidence_effect_policy import EvidenceEffectDecision
+from ontology.governed_evidence_filesystem_bridge import GovernedEvidenceFilesystemBridge
+
 PRIMITIVE = "collaboration_history_repository"
 
 DEPENDENCIES = [
@@ -201,17 +204,82 @@ class CollaborationHistoryRepository:
             "ready_for_external_capability_planner": external_collaboration_index >= 0.35 and corruption_penalty < 0.50,
         }
 
-    def _write_jsonl(self, path: Path, record: Dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    @staticmethod
+    def _relative_effect_path(filesystem_bridge: GovernedEvidenceFilesystemBridge, path: Path) -> Path:
+        root_path = getattr(filesystem_bridge.filesystem_context, "root_path", None)
+        if root_path is None:
+            raise RuntimeError("governed_filesystem_root_path_missing")
+        try:
+            return path.relative_to(Path(root_path))
+        except ValueError as exc:
+            raise RuntimeError("governed_filesystem_path_outside_root") from exc
 
-    def _write_json(self, path: Path, record: Dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8") as handle:
-            json.dump(record, handle, ensure_ascii=False, indent=2, sort_keys=True)
+    def _ensure_parent_governed(
+        self, *, filesystem_bridge: GovernedEvidenceFilesystemBridge,
+        decisions: Dict[str, EvidenceEffectDecision], decision_key: str,
+        slot: str, path: Path,
+    ) -> None:
+        parent = path.parent
+        if parent.exists():
+            return
+        decision = decisions.get(decision_key)
+        if decision is None:
+            raise RuntimeError("governed_parent_create_decision_missing:" + decision_key)
+        result = filesystem_bridge.execute_path(
+            decision=decision, evidence_role="filesystem_parent_create",
+            slot=slot, operation_id="FS_CREATE_DIR",
+            path=self._relative_effect_path(filesystem_bridge, parent),
+        )
+        if getattr(result, "status", None) != "EVIDENCE_EFFECT_CONFIRMED":
+            raise RuntimeError("governed_parent_create_not_confirmed:" + decision_key)
 
-    def step(self, persist: bool = True, max_records: int = 250) -> Dict[str, Any]:
+    def _write_jsonl(
+        self, path: Path, record: Dict[str, Any], *,
+        filesystem_bridge: GovernedEvidenceFilesystemBridge,
+        decision: EvidenceEffectDecision,
+        parent_decisions: Dict[str, EvidenceEffectDecision],
+        parent_decision_key: str, slot: str,
+    ) -> None:
+        self._ensure_parent_governed(
+            filesystem_bridge=filesystem_bridge, decisions=parent_decisions,
+            decision_key=parent_decision_key, slot=slot + "_parent", path=path,
+        )
+        payload = (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        result = filesystem_bridge.execute_path(
+            decision=decision, evidence_role="collaboration_history_repository_jsonl",
+            slot=slot, operation_id="FS_APPEND_BYTES",
+            path=self._relative_effect_path(filesystem_bridge, path), payload=payload,
+        )
+        if getattr(result, "status", None) != "EVIDENCE_EFFECT_CONFIRMED":
+            raise RuntimeError("governed_jsonl_write_not_confirmed:" + slot)
+
+    def _write_json(
+        self, path: Path, record: Dict[str, Any], *,
+        filesystem_bridge: GovernedEvidenceFilesystemBridge,
+        decision: EvidenceEffectDecision,
+        parent_decisions: Dict[str, EvidenceEffectDecision],
+        parent_decision_key: str, slot: str,
+    ) -> None:
+        self._ensure_parent_governed(
+            filesystem_bridge=filesystem_bridge, decisions=parent_decisions,
+            decision_key=parent_decision_key, slot=slot + "_parent", path=path,
+        )
+        payload = json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+        result = filesystem_bridge.execute_path(
+            decision=decision, evidence_role="collaboration_history_repository_json",
+            slot=slot, operation_id="FS_WRITE_REPLACE_BYTES",
+            path=self._relative_effect_path(filesystem_bridge, path), payload=payload,
+        )
+        if getattr(result, "status", None) != "EVIDENCE_EFFECT_CONFIRMED":
+            raise RuntimeError("governed_json_write_not_confirmed:" + slot)
+
+
+    def step(
+        self, persist: bool = True, max_records: int = 250, *,
+        filesystem_bridge: Optional[GovernedEvidenceFilesystemBridge] = None,
+        evidence_decisions: Optional[Dict[str, EvidenceEffectDecision]] = None,
+        parent_create_decisions: Optional[Dict[str, EvidenceEffectDecision]] = None,
+    ) -> Dict[str, Any]:
         sources = self._load_sources()
         records = self._flatten_records(sources)
         if max_records and len(records) > max_records:
@@ -257,8 +325,32 @@ class CollaborationHistoryRepository:
         }
 
         if persist:
-            self._write_jsonl(self.repository_path, result)
-            self._write_json(self.summary_path, result)
+            if filesystem_bridge is None:
+                raise RuntimeError("governed_filesystem_bridge_required_for_persistence")
+            if evidence_decisions is None:
+                raise RuntimeError("governed_evidence_decisions_required_for_persistence")
+            if parent_create_decisions is None:
+                parent_create_decisions = {}
+            required_write_decisions = ("repository_jsonl", "summary_json", "archive_json")
+            missing = [key for key in required_write_decisions if key not in evidence_decisions]
+            if missing:
+                raise RuntimeError("governed_write_decisions_missing:" + ",".join(missing))
+            if len({id(evidence_decisions[key]) for key in required_write_decisions}) != 3:
+                raise RuntimeError("governed_write_decisions_must_be_distinct")
+            self._write_jsonl(
+                self.repository_path, result,
+                filesystem_bridge=filesystem_bridge,
+                decision=evidence_decisions["repository_jsonl"],
+                parent_decisions=parent_create_decisions,
+                parent_decision_key="root_parent_create", slot="repository_jsonl",
+            )
+            self._write_json(
+                self.summary_path, result,
+                filesystem_bridge=filesystem_bridge,
+                decision=evidence_decisions["summary_json"],
+                parent_decisions=parent_create_decisions,
+                parent_decision_key="root_parent_create", slot="summary_json",
+            )
             archive_record = {
                 "primitive": PRIMITIVE,
                 "timestamp_utc": timestamp,
@@ -267,7 +359,13 @@ class CollaborationHistoryRepository:
                 "source_stats": source_stats,
             }
             archive_name = "archive_" + timestamp.replace(":", "").replace("+", "Z") + ".json"
-            self._write_json(self.archive_dir / archive_name, archive_record)
+            self._write_json(
+                self.archive_dir / archive_name, archive_record,
+                filesystem_bridge=filesystem_bridge,
+                decision=evidence_decisions["archive_json"],
+                parent_decisions=parent_create_decisions,
+                parent_decision_key="archive_parent_create", slot="archive_json",
+            )
             result["repository_path"] = str(self.repository_path)
             result["summary_path"] = str(self.summary_path)
             result["archive_path"] = str(self.archive_dir / archive_name)

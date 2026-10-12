@@ -49,7 +49,8 @@ def _history_file() -> Path:
         path = ssd_continuity / "certifications" / "civilizational_continuity_history.jsonl"
     else:
         path = ROOT / "civilizational_continuity_history.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # Pure path resolution: module import must not mutate the filesystem.
+    # Persistence-time directory creation is a separate causal effect.
     return path
 
 

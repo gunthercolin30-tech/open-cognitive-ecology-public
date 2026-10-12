@@ -1,0 +1,4 @@
+from ontology.occ1h_a095_rrpa_baseline_dependency_contract import baseline
+def state():
+ r=baseline()
+ return {**r,"rrp5":"IMPACT_SURFACE_MAPPED","rrp6":"DRY_RUN_ALL_PRODUCTS_VALID","rrp7":"SINGLE_TRANSACTIONAL_INSTALL_COMPLETE","rrp8":"VALIDATION_FUNNEL_READY_AND_LOCAL_PASSED","impact_surface":["provider_evidence_provenance","theory_revision_binding","policy_constitutional_acceptance_binding","cross_layer_end_to_end_provenance"],"dry_run_all_products_valid":True,"validation_funnel":["T0_SYNTAX_INTEGRITY","T1_ROOT_FUNCTIONAL","T2_DEGRADATION","T3_LOCAL_NONREGRESSION","T4_DIRECT_CONSUMERS","T5_PRECLOSE","T6_DEPENDENT_ROOTS","T7_FULL_OCC1H_CROWN","T8_VALIDATION_MAIN"],"end_to_end_provider_theory_policy_provenance_path_materialized":False,"current_verdict":"INCONCLUSIVE","production_runtime_modified":False,"criticality_changed":False,"occ1h_closed":False,"p159_final_lock":False,"p160_opened":False}

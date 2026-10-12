@@ -301,10 +301,10 @@ class MultimodalPerceptionEngine:
             summary = "no active external modality; passive system observation only"
         return summary, diversity, fusion_quality, markers
 
-    def _record_metrics(self, output: Dict[str, Any]) -> None:
+    def _record_metrics(self, output: Dict[str, Any], metrics_effect_context=None) -> None:
         try:
             from ontology.metrics_history_recorder import MetricsHistoryRecorder
-            MetricsHistoryRecorder(root=self.root).step(output)
+            MetricsHistoryRecorder(root=self.root).step(output, effect_context=metrics_effect_context)
         except Exception:
             pass
 
@@ -322,6 +322,7 @@ class MultimodalPerceptionEngine:
 
     def step(self, inputs: Optional[Dict[str, Any]] = None, persist: bool = True) -> Dict[str, Any]:
         inputs = dict(inputs or {})
+        metrics_effect_context = inputs.pop("metrics_effect_context", None)
         state = self._load_state()
         modalities = self._build_modalities(inputs)
         fusion_summary, sensor_diversity_index, fusion_quality, markers = self._fusion(modalities)
@@ -397,7 +398,7 @@ class MultimodalPerceptionEngine:
             },
         }
         if persist:
-            self._record_metrics(output)
+            self._record_metrics(output, metrics_effect_context=metrics_effect_context)
         return output
 
 

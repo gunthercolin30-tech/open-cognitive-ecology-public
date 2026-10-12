@@ -215,7 +215,8 @@ class LongitudinalAutonomousConversationValidation:
         }
 
     def step(self, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        inputs = inputs or {}
+        inputs = dict(inputs or {})
+        metrics_effect_context = inputs.pop("metrics_effect_context", None)
         cycles = int(inputs.get("cycles", 1) or 1)
         cycles = max(1, min(100, cycles))
         records = []
@@ -255,6 +256,7 @@ class LongitudinalAutonomousConversationValidation:
                 validation_status="validated" if result.get("longitudinal_autonomous_conversation_certified") else "observed",
                 governance_status="governed",
                 runtime_status="operational",
+                effect_context=metrics_effect_context,
             )
         except Exception:
             pass

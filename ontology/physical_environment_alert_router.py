@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from ontology.governed_evidence_filesystem_bridge import GovernedEvidenceFilesystemBridge
 
 PRIMITIVE = 'physical_environment_alert_router'
 PRIMITIVE_NAME = PRIMITIVE
@@ -106,15 +107,27 @@ def _load_json(path: Path, default: Any) -> Any:
     return default
 
 
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+def _write_json(path: Path, payload: Any, *, filesystem_context: Any, slot: str, parent_create_filesystem_context: Any = None) -> None:
+    if filesystem_context is None:
+        raise RuntimeError("governed_filesystem_context_required")
+    path_rel = str(path.relative_to(filesystem_context.root_path))
+    if not path.parent.exists():
+        if parent_create_filesystem_context is None:
+            raise RuntimeError("governed_filesystem_parent_create_context_required:" + slot)
+        if parent_create_filesystem_context is filesystem_context:
+            raise RuntimeError("distinct_governed_filesystem_parent_create_context_required:" + slot)
+        parent_rel = str(path.parent.relative_to(parent_create_filesystem_context.root_path))
+        parent_create_filesystem_context.execute_path(slot=slot + "_parent", operation_id="FS_CREATE_DIR", path=parent_rel)
+    filesystem_context.execute_path(slot=slot, operation_id="FS_WRITE_REPLACE_BYTES", path=path_rel, payload=json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
 
 
-def _append_jsonl(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('a', encoding='utf-8') as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + '\n')
+def _append_jsonl(path: Path, payload: Any, *, evidence_bridge: Any, evidence_decision: Any, slot: str) -> None:
+    if evidence_bridge is None or evidence_decision is None:
+        raise RuntimeError("governed_evidence_context_required")
+    rel = str(path.relative_to(evidence_bridge.filesystem_context.root_path))
+    effect_result = evidence_bridge.execute_path(decision=evidence_decision, evidence_role=evidence_decision.evidence_role, slot=slot, operation_id="FS_APPEND_BYTES", path=rel, payload=(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8"))
+    if not isinstance(effect_result, dict) or effect_result.get("status") != "EVIDENCE_EFFECT_CONFIRMED":
+        raise RuntimeError("governed_evidence_effect_not_confirmed:" + str(effect_result.get("status") if isinstance(effect_result, dict) else None))
 
 
 class PhysicalEnvironmentAlertRouter:
@@ -225,7 +238,18 @@ class PhysicalEnvironmentAlertRouter:
             'notification_routing_pressure': round(notification_pressure, 6),
         }
 
-    def step(self, inputs: Any = None, persist: bool = True) -> dict[str, Any]:
+    def step(
+        self,
+        inputs: Dict[str, Any],
+        persist: bool = True,
+        *,
+        latest_filesystem_context=None,
+        route_index_filesystem_context=None,
+        evidence_bridge=None,
+        evidence_decision=None,
+        latest_parent_create_filesystem_context=None,
+        route_index_parent_create_filesystem_context=None,
+    ) -> Dict[str, Any]:
         self._cycle_counter += 1
         normalised = self._normalise_inputs(inputs)
         detection = normalised['detection']
@@ -293,7 +317,15 @@ class PhysicalEnvironmentAlertRouter:
         }
 
         if persist:
-            self._persist(result)
+            self._persist(
+                result,
+                latest_filesystem_context=latest_filesystem_context,
+                route_index_filesystem_context=route_index_filesystem_context,
+                evidence_bridge=evidence_bridge,
+                evidence_decision=evidence_decision,
+                latest_parent_create_filesystem_context=latest_parent_create_filesystem_context,
+                route_index_parent_create_filesystem_context=route_index_parent_create_filesystem_context,
+            )
 
         return result
 
@@ -311,27 +343,38 @@ class PhysicalEnvironmentAlertRouter:
             actions.append('continue_passive_environmental_monitoring')
         return actions
 
-    def _persist(self, result: dict[str, Any]) -> None:
-        ALERT_DIR.mkdir(parents=True, exist_ok=True)
-        _append_jsonl(HISTORY_PATH, result)
-        _write_json(LATEST_PATH, result)
-
-        index = _load_json(ROUTE_INDEX_PATH, {
-            'primitive': PRIMITIVE,
-            'total_cycles': 0,
-            'total_routed_events': 0,
-            'total_notifications': 0,
-            'total_memory_records': 0,
-            'total_governance_escalations': 0,
-        })
-        index['total_cycles'] = int(index.get('total_cycles', 0)) + 1
-        index['total_routed_events'] = int(index.get('total_routed_events', 0)) + int(result.get('routed_event_count', 0))
-        index['total_notifications'] = int(index.get('total_notifications', 0)) + int(result.get('notification_count', 0))
-        index['total_memory_records'] = int(index.get('total_memory_records', 0)) + int(result.get('memory_record_count', 0))
-        index['total_governance_escalations'] = int(index.get('total_governance_escalations', 0)) + int(result.get('governance_escalation_count', 0))
-        index['latest_timestamp_utc'] = result.get('timestamp_utc')
-        index['latest_path'] = str(LATEST_PATH)
-        _write_json(ROUTE_INDEX_PATH, index)
+    def _persist(
+        self,
+        result: Dict[str, Any],
+        *,
+        latest_filesystem_context,
+        route_index_filesystem_context,
+        evidence_bridge,
+        evidence_decision,
+        latest_parent_create_filesystem_context=None,
+        route_index_parent_create_filesystem_context=None,
+    ) -> None:
+        if latest_filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required:latest_write")
+        if route_index_filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required:route_index_write")
+        if latest_filesystem_context is route_index_filesystem_context:
+            raise RuntimeError("distinct_governed_filesystem_contexts_required")
+        if evidence_bridge is None:
+            raise RuntimeError("governed_evidence_filesystem_bridge_required:history_append")
+        if evidence_decision is None:
+            raise RuntimeError("governed_evidence_decision_required:history_append")
+        _append_jsonl(HISTORY_PATH, result, evidence_bridge=evidence_bridge, evidence_decision=evidence_decision, slot="history_append")
+        _write_json(LATEST_PATH, result, filesystem_context=latest_filesystem_context, slot="latest_write", parent_create_filesystem_context=latest_parent_create_filesystem_context)
+        index = _load_json(ROUTE_INDEX_PATH, {"primitive": PRIMITIVE, "total_cycles": 0, "total_routed_events": 0, "total_notifications": 0, "total_memory_records": 0, "total_governance_escalations": 0})
+        index["total_cycles"] = int(index.get("total_cycles", 0)) + 1
+        index["total_routed_events"] = int(index.get("total_routed_events", 0)) + int(result.get("routed_event_count", 0))
+        index["total_notifications"] = int(index.get("total_notifications", 0)) + int(result.get("notification_count", 0))
+        index["total_memory_records"] = int(index.get("total_memory_records", 0)) + int(result.get("memory_record_count", 0))
+        index["total_governance_escalations"] = int(index.get("total_governance_escalation_count", 0)) + int(result.get("governance_escalation_count", 0))
+        index["latest_timestamp_utc"] = result.get("timestamp_utc")
+        index["latest_path"] = str(LATEST_PATH)
+        _write_json(ROUTE_INDEX_PATH, index, filesystem_context=route_index_filesystem_context, slot="route_index_write", parent_create_filesystem_context=route_index_parent_create_filesystem_context)
 
 
 class PhysicalEnvironmentalAlertRouter(PhysicalEnvironmentAlertRouter):

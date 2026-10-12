@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, List, Optional
 import json
 import re
-import subprocess
+from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
 
 
 class ZenodoPublicationOrchestrator:

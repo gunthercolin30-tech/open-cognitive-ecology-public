@@ -50,6 +50,7 @@ class CorpusSimulationEngine:
         ontology_package: str = "ontology",
         max_steps: int = 100,
         stop_on_error: bool = False,
+        filesystem_effect_context_provider=None,
     ) -> None:
         """
         Initialise le moteur de simulation.
@@ -66,6 +67,7 @@ class CorpusSimulationEngine:
         self.ontology_package = ontology_package
         self.max_steps = int(max_steps)
         self.stop_on_error = bool(stop_on_error)
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
 
         self.modules: list[ModuleType] = []
         self.instances: list[Any] = []
@@ -439,6 +441,21 @@ class CorpusSimulationEngine:
                 ensure_ascii=False,
             )
 
+    def _governed_write_replace(self, path: Path, payload: bytes, slot: str) -> None:
+        provider = self.filesystem_effect_context_provider
+        if not callable(provider):
+            raise RuntimeError("filesystem_effect_context_provider_required")
+        context = provider("FS_WRITE_REPLACE_BYTES", path, slot)
+        if context is None:
+            raise RuntimeError("preissued_filesystem_effect_context_required")
+        context.begin()
+        remaining = context.remaining()
+        if remaining.get(slot, 0) != 1 or sum(remaining.values()) != 1:
+            raise RuntimeError("exactly_one_report_write_authority_required")
+        context.execute_path(slot, "FS_WRITE_REPLACE_BYTES", path, payload=payload)
+        if any(context.remaining().values()):
+            raise RuntimeError("report_write_authority_not_fully_consumed")
+
     def save_report(
         self,
         filename: str = "corpus_simulation_report.txt",
@@ -498,7 +515,7 @@ class CorpusSimulationEngine:
             lines.append("None")
         lines.append("")
 
-        path.write_text("\n".join(lines), encoding="utf-8")
+        self._governed_write_replace(path, "\n".join(lines).encode("utf-8"), "macro04_corpus_simulation_report")
 
     # ------------------------------------------------------------------
     # Utilitaires internes

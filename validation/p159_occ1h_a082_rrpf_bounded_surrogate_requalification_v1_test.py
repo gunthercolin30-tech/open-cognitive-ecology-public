@@ -1,0 +1,5 @@
+from ontology.occ1h_a082_rrpf_bounded_surrogate_requalification import experiment
+def test_rrp21_discrimination(): r=experiment(); s=r["states"]; assert r["rrp21"]=="BOUNDED_NON_PRODUCTION_CACHE_TO_CNP_SURROGATE_EXPERIMENT_EXECUTED" and r["discrimination_ok"] and s["intact"]["accepted"] and not s["substituted"]["accepted"] and not s["stale"]["accepted"] and not s["bypass_attempt"]["accepted"]
+def test_rrp22_independent_requalification(): r=experiment(); assert r["rrp22"]=="INDEPENDENT_REQUALIFICATION_PASSED_BOUNDED" and r["candidate_verdict"]=="RESISTED" and r["root_materiality"]=="ROOT"
+def test_scope_degradation(): r=experiment(); assert r["evidence_scope"]=="BOUNDED_NON_PRODUCTION_SURROGATE_ONLY" and not r["production_runtime_modified"] and not r["production_cache_to_cnp_path_materialized"] and r["historical_inconclusive_preserved"]
+def test_nonregression(): r=experiment(); assert r["final_disposition_required"] and not r["occ1h_closed"] and not r["p159_final_lock"] and not r["p160_opened"] and r["functional_only"] and r["phenomenology_undetermined"]

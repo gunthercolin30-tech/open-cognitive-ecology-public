@@ -30,7 +30,10 @@ import datetime as _dt
 import json
 import os
 import re
-import subprocess
+from ontology.fly_cli_exact_command_contract import (
+    FlyCommandSpec, OP_AUTH_WHOAMI, OP_STATUS, OP_APPS_LIST, OP_SSH_IDENTITY_PROBE,
+)
+from ontology.governed_fly_cli_transport import run_fly_operation
 
 ROOT = Path.home() / "open-cognitive-ecology"
 PRIMITIVE = "REAL_CLOUD_NODE_DEPLOYMENT_VALIDATOR"
@@ -58,8 +61,9 @@ class RealCloudNodeDeploymentValidator:
     and adds a real transport probe through flyctl.
     """
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Optional[Path] = None, filesystem_effect_context_provider=None) -> None:
         self.root = Path(root) if root else ROOT
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
         self.history_path = self._history_path()
 
     def _history_path(self) -> Path:
@@ -74,49 +78,20 @@ class RealCloudNodeDeploymentValidator:
             path = ssd_continuity / "certifications" / "real_cloud_node_deployment_validator_history.jsonl"
         else:
             path = self.root / "real_cloud_node_deployment_validator_history.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
+        parent = path.parent
+        if not parent.exists():
+            provider = self.filesystem_effect_context_provider
+            if provider is None or not callable(provider):
+                raise RuntimeError("filesystem_effect_context_provider_required")
+            context = provider("FS_CREATE_DIRS", parent)
+            if context is None:
+                raise RuntimeError("preissued_filesystem_effect_context_required")
+            context.begin()
+            context.execute_path("history_parent", "FS_CREATE_DIRS", parent)
         return path
 
-    def _run(self, command: list[str], timeout_seconds: int) -> Dict[str, Any]:
-        try:
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
-            )
-            return {
-                "command": command,
-                "returncode": completed.returncode,
-                "success": completed.returncode == 0,
-                "stdout": completed.stdout[-6000:],
-                "stderr": completed.stderr[-3000:],
-            }
-        except FileNotFoundError as exc:
-            return {
-                "command": command,
-                "returncode": None,
-                "success": False,
-                "stdout": "",
-                "stderr": f"FileNotFoundError: {exc}",
-            }
-        except subprocess.TimeoutExpired as exc:
-            return {
-                "command": command,
-                "returncode": None,
-                "success": False,
-                "stdout": (exc.stdout or "")[-6000:] if isinstance(exc.stdout, str) else "",
-                "stderr": f"TimeoutExpired after {timeout_seconds}s",
-            }
-        except Exception as exc:
-            return {
-                "command": command,
-                "returncode": None,
-                "success": False,
-                "stdout": "",
-                "stderr": f"{type(exc).__name__}: {exc}",
-            }
+    def _run_fly(self, operation_id: str, timeout_seconds: int, app_name: Optional[str] = None) -> Dict[str, Any]:
+        return run_fly_operation(FlyCommandSpec(operation_id=operation_id, app_name=app_name), timeout_seconds)
 
     def _read_fly_toml_app(self, path: Path) -> Optional[str]:
         try:
@@ -195,17 +170,14 @@ class RealCloudNodeDeploymentValidator:
         timestamp = _now()
         commands: Dict[str, Any] = {}
 
-        commands["whoami"] = self._run(["fly", "auth", "whoami"], timeout)
+        commands["whoami"] = self._run_fly(OP_AUTH_WHOAMI, timeout)
         if app_name:
-            commands["status"] = self._run(["fly", "status", "--app", app_name], timeout)
-            commands["apps_list"] = self._run(["fly", "apps", "list"], timeout)
-            commands["ssh_probe"] = self._run(
-                ["fly", "ssh", "console", "--app", app_name, "-C", "hostname && uname -a"],
-                timeout,
-            )
+            commands["status"] = self._run_fly(OP_STATUS, timeout, app_name)
+            commands["apps_list"] = self._run_fly(OP_APPS_LIST, timeout)
+            commands["ssh_probe"] = self._run_fly(OP_SSH_IDENTITY_PROBE, timeout, app_name)
         else:
             commands["status"] = {"success": False, "stderr": "No Fly.io app name resolved. Provide app_name or OCE_FLY_APP.", "stdout": "", "returncode": None, "command": ["fly", "status"]}
-            commands["apps_list"] = self._run(["fly", "apps", "list"], timeout)
+            commands["apps_list"] = self._run_fly(OP_APPS_LIST, timeout)
             commands["ssh_probe"] = {"success": False, "stderr": "No Fly.io app name resolved. SSH probe skipped.", "stdout": "", "returncode": None, "command": ["fly", "ssh", "console"]}
 
         status_text = (commands["status"].get("stdout") or "") + "\n" + (commands["status"].get("stderr") or "")

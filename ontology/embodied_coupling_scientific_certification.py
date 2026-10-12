@@ -149,6 +149,7 @@ class EmbodiedCouplingScientificCertification:
     def step(self, inputs: Optional[dict[str, Any]] = None, **overrides: Any) -> dict[str, Any]:
         data = dict(inputs or {})
         data.update(overrides)
+        metrics_effect_context = data.pop("metrics_effect_context", None)
 
         g17 = data.get("g17_result") if isinstance(data.get("g17_result"), dict) else self._collect_g17()
         g18 = data.get("g18_result") if isinstance(data.get("g18_result"), dict) else self._collect_g18()
@@ -289,6 +290,7 @@ class EmbodiedCouplingScientificCertification:
                 validation_status=True,
                 governance_status="governed",
                 runtime_status="operational",
+                effect_context=metrics_effect_context,
             )
             result["metrics_recorded"] = True
         except Exception as exc:

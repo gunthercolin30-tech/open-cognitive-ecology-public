@@ -1,0 +1,35 @@
+from ontology.occ1h_a095_rrpd_resolution_space import resolution_space
+def authority_gate():
+ r=resolution_space()
+ return {**r,
+ "rrp17":"BLOCKER_CAUSALLY_DECOMPOSED",
+ "causal_decomposition":[
+  "provider evidence may carry provenance locally",
+  "theory revision may carry provenance locally",
+  "policy/constitutional acceptance may carry provenance locally",
+  "A095 lacks empirical assurance that one authoritative provenance chain remains bound across all three transitions",
+  "component-level provenance cannot establish end-to-end cross-layer binding"],
+ "rrp18":"TECHNICAL_ASSURANCE_CAPABILITY_GAP",
+ "gap_class":"TECHNICAL_ASSURANCE_GAP_NOT_NORMATIVE_RULE_GAP",
+ "normative_gap_detected":False,
+ "rrp19":"BOUNDED_NON_PRODUCTION_CROSS_LAYER_PROVENANCE_SURROGATE_ASSURANCE_DESIGNED",
+ "remediation_design":{
+  "scope":"isolated non-production surrogate",
+  "accept_intact_provider_theory_policy_provenance_chain":True,
+  "reject_provider_to_theory_provenance_substitution":True,
+  "reject_theory_to_policy_provenance_substitution":True,
+  "reject_cross_layer_identity_mismatch":True,
+  "reject_missing_or_ambiguous_provenance":True,
+  "fail_closed":True,
+  "production_wiring_forbidden":True,
+  "independent_rrp22_requalification_required":True},
+ "normative_degrees_of_freedom":0,
+ "normative_minimality":{"necessary":True,"independent":True,"sufficiently_exhaustive":True,"fixed_cardinality_forbidden":True},
+ "existing_normative_basis":["DNA-L0.5 provenance","P091 provenance control domain","P092 F14 constitutional provenance bridge","fail-closed uncertainty handling"],
+ "new_normative_decision_required":False,
+ "rrp20":"TECHNICAL_REMEDIATION_AUTHORIZED",
+ "authority_basis":"existing provenance requirements plus RRP defensive-validation authority; no new production or normative authority granted",
+ "rrp21_authorized_scope":"BOUNDED_NON_PRODUCTION_CROSS_LAYER_PROVENANCE_ASSURANCE_EXPERIMENT_ONLY",
+ "rrp_f_required":True,
+ "current_verdict":"INCONCLUSIVE","production_runtime_modified":False,"production_cross_layer_path_materialized":False,
+ "criticality_changed":False,"occ1h_closed":False,"p159_final_lock":False,"p160_opened":False}

@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 import json
 import html
 
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
+
 PRIMITIVE = "metrics_html_report_generator"
 DEPENDENCIES = [
     "metrics_history_recorder",
@@ -46,9 +48,13 @@ def _fmt_float(value) -> str:
     return _safe(value)
 
 
-def _write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+def _write(path: Path, content: str, fs_context: GovernedFilesystemEffectContext | None = None, slot_prefix: str | None = None) -> None:
+    if not isinstance(fs_context, GovernedFilesystemEffectContext):
+        raise RuntimeError("governed filesystem effect context required")
+    if not slot_prefix:
+        raise RuntimeError("governed filesystem effect slot prefix required")
+    fs_context.execute_path(f"{slot_prefix}_parent_create", "FS_CREATE_DIRS", path.parent)
+    fs_context.execute_path(f"{slot_prefix}_write", "FS_WRITE_REPLACE_BYTES", path, content.encode("utf-8"))
 
 
 def _page(title: str, body: str) -> str:
@@ -176,8 +182,22 @@ class MetricsHTMLReportGenerator:
         archive_manifest = _read_json(self.metrics_dir / "longitudinal_metrics_archive_manifest.json", {})
         return aggregation, significance, anomalies, archive_manifest
 
-    def step(self, inputs: dict | None = None) -> dict:
+    def step(self, inputs: dict | None = None, filesystem_effect_context: GovernedFilesystemEffectContext | None = None) -> dict:
         aggregation, significance, anomalies, archive_manifest = self._load_inputs()
+        if not isinstance(filesystem_effect_context, GovernedFilesystemEffectContext):
+            raise RuntimeError("governed filesystem effect context required")
+        if filesystem_effect_context.authority_minting is not False:
+            raise RuntimeError("consumer authority minting forbidden")
+        expected_slots = {
+            "metrics_report_parent_create": 1, "metrics_report_write": 1,
+            "longitudinal_metrics_dashboard_parent_create": 1, "longitudinal_metrics_dashboard_write": 1,
+            "conversation_metrics_report_parent_create": 1, "conversation_metrics_report_write": 1,
+            "runtime_metrics_report_parent_create": 1, "runtime_metrics_report_write": 1,
+            "state_parent_create": 1, "state_write": 1,
+        }
+        if filesystem_effect_context.remaining() != expected_slots:
+            raise RuntimeError("filesystem effect slot cardinality mismatch")
+        filesystem_effect_context.begin()
         self.reports_dir.mkdir(parents=True, exist_ok=True)
 
         common = _summary_cards(aggregation, significance, anomalies)
@@ -205,10 +225,10 @@ class MetricsHTMLReportGenerator:
             "conversation_metrics_report": self.reports_dir / "conversation_metrics_report.html",
             "runtime_metrics_report": self.reports_dir / "runtime_metrics_report.html",
         }
-        _write(paths["metrics_report"], metrics_report)
-        _write(paths["longitudinal_metrics_dashboard"], longitudinal_report)
-        _write(paths["conversation_metrics_report"], conversation_report)
-        _write(paths["runtime_metrics_report"], runtime_report)
+        _write(paths["metrics_report"], metrics_report, filesystem_effect_context, "metrics_report")
+        _write(paths["longitudinal_metrics_dashboard"], longitudinal_report, filesystem_effect_context, "longitudinal_metrics_dashboard")
+        _write(paths["conversation_metrics_report"], conversation_report, filesystem_effect_context, "conversation_metrics_report")
+        _write(paths["runtime_metrics_report"], runtime_report, filesystem_effect_context, "runtime_metrics_report")
 
         state = {
             "primitive": PRIMITIVE,
@@ -225,8 +245,10 @@ class MetricsHTMLReportGenerator:
             },
         }
         state_path = self.metrics_dir / "metrics_html_report_generator_state.json"
-        _write(state_path, json.dumps(state, indent=2, ensure_ascii=False))
+        _write(state_path, json.dumps(state, indent=2, ensure_ascii=False), filesystem_effect_context, "state")
 
+        if any(filesystem_effect_context.remaining().values()):
+            raise RuntimeError("unconsumed filesystem effect handles")
         success = all(p.exists() and p.stat().st_size > 0 for p in paths.values())
         return {
             "primitive": PRIMITIVE,

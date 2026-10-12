@@ -53,11 +53,12 @@ class ExternalCollaborationExecutionLayer:
         digest = hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()[:16]
         return f"{prefix}-{digest}"
 
-    def _append_jsonl(self, path: Path, record: dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-
+    def _append_jsonl(self, path: Path, record: dict[str, Any], fs_context=None) -> None:
+        if fs_context is None:
+            raise PermissionError("JSONL append requires preissued filesystem effect context")
+        data = (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        fs_context.execute_path("jsonl_parent_create", "FS_CREATE_DIR", path.parent)
+        fs_context.execute_path("jsonl_append", "FS_APPEND_BYTES", path, data)
     def _safe_component(self, primitive: str, fn: Any, fallback: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
             result = fn()
@@ -311,19 +312,21 @@ class ExternalCollaborationExecutionLayer:
             {"success": False, "identity_continuity_index": 0.0, "identity_violation_count": 0},
         )
 
-    def _record_metrics(self, metrics: dict[str, Any]) -> dict[str, Any]:
+    def _record_metrics(self, metrics: dict[str, Any], metrics_effect_context=None) -> dict[str, Any]:
         try:
             from ontology.metrics_history_recorder import MetricsHistoryRecorder
             recorder = MetricsHistoryRecorder(root=self.root)
             if hasattr(recorder, "record"):
-                return recorder.record(metrics) or {"success": True, "method": "record"}
-            return recorder.step(metrics)
+                return recorder.record(metrics, effect_context=metrics_effect_context) or {"success": True, "method": "record"}
+            return recorder.step(metrics, effect_context=metrics_effect_context)
         except Exception as exc:
             return {"primitive": "metrics_history_recorder", "success": False, "error": repr(exc)}
 
     def step(self, inputs: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+        fs_context = kwargs.pop("fs_context", None)
         raw_inputs = dict(inputs or {})
         raw_inputs.update(kwargs)
+        metrics_effect_context = raw_inputs.pop("metrics_effect_context", None)
         state = self._build_inputs(raw_inputs)
         timestamp = self._utc()
         execution_id = self._hash(timestamp + state["problem"], "EXTEXEC")
@@ -387,7 +390,7 @@ class ExternalCollaborationExecutionLayer:
             "governance_preservation_score": round(governance_preservation_score, 6),
             "end_to_end_external_collaboration_score": round(end_to_end_score, 6),
         }
-        metrics_result = self._record_metrics(metrics)
+        metrics_result = self._record_metrics(metrics, metrics_effect_context=metrics_effect_context)
         result = {
             "primitive": PRIMITIVE, "timestamp_utc": timestamp, "execution_id": execution_id,
             "source_host": socket.gethostname(), "query_id": execution_id, "provider": provider,
@@ -432,7 +435,7 @@ class ExternalCollaborationExecutionLayer:
         result["history_path"] = str(self.history_path)
         self.registry_path.write_text(json.dumps({"latest_execution_id": execution_id, "latest_record_path": str(record_path), "latest_metrics": metrics}, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         result["registry_path"] = str(self.registry_path)
-        self._append_jsonl(self.history_path, {"timestamp_utc": timestamp, "execution_id": execution_id, "validated": execution_validated, "metrics": metrics, "classification": result["classification"]})
+        self._append_jsonl(self.history_path, {"timestamp_utc": timestamp, "execution_id": execution_id, "validated": execution_validated, "metrics": metrics, "classification": result["classification"]}, fs_context=fs_context)
         return result
 
 if __name__ == "__main__":

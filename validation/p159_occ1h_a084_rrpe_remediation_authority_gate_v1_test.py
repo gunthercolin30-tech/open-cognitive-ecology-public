@@ -1,0 +1,5 @@
+from ontology.occ1h_a084_rrpe_remediation_authority_gate import rrpe
+def test_decomposition_and_classification(): r=rrpe(); assert r["rrp17"]=="BLOCKER_CAUSALLY_DECOMPOSED" and r["rrp18"]=="TECHNICAL_ASSURANCE_CAPABILITY_GAP" and not r["normative_gap"]
+def test_normative_minimality(): r=rrpe(); d=r["normative_degrees_of_freedom"]; assert d["count"]==0 and d["NECESSARY"] and d["INDEPENDENT"] and d["SUFFICIENTLY_EXHAUSTIVE"] and d["fixed_cardinality_forbidden"]
+def test_design_and_authority(): r=rrpe(); assert r["rrp19"]=="BOUNDED_NON_PRODUCTION_CLOCK_ROLLBACK_SURROGATE_DESIGN_ADMISSIBLE" and r["rrp20"]=="TECHNICAL_REMEDIATION_AUTHORIZED" and r["existing_normative_authority_sufficient"] and not r["new_normative_decision_required"] and r["rrp_f_required"]
+def test_nonregression(): r=rrpe(); assert r["verdict"]=="INCONCLUSIVE" and not r["production_runtime_modified"] and not r["production_clock_path_materialized"] and not r["criticality_changed"] and not r["occ1h_closed"] and not r["p159_final_lock"] and not r["p160_opened"]

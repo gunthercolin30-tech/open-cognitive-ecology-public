@@ -32,8 +32,6 @@ class DistributedCivilizationalMemory:
         self.root = Path(root) if root is not None else Path.home() / "open-cognitive-ecology"
         self.base_dir = self.root / "distributed_nodes"
         self.memory_dir = self.base_dir / "civilizational_memory_replicas"
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-        self.memory_dir.mkdir(parents=True, exist_ok=True)
         self.registry_path = self.base_dir / "distributed_civilizational_memory.json"
         self.history_path = self.base_dir / "distributed_memory_history.jsonl"
 
@@ -54,20 +52,35 @@ class DistributedCivilizationalMemory:
             pass
         return default
 
-    def _write_json(self, path: Path, payload) -> bool:
+    def _write_json(self, path: Path, payload, filesystem_effect_context) -> bool:
+        if filesystem_effect_context is None:
+            raise PermissionError("filesystem_effect_context_required")
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            if not path.parent.exists():
+                filesystem_effect_context.execute_path("memory_parent_create", "FS_CREATE_DIR", path.parent)
+            filesystem_effect_context.execute_path(
+                "memory_write_replace", "FS_WRITE_REPLACE_BYTES", path,
+                payload=json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"),
+            )
             return True
+        except PermissionError:
+            raise
         except Exception:
             return False
 
-    def _append_jsonl(self, path: Path, payload) -> bool:
+    def _append_jsonl(self, path: Path, payload, filesystem_effect_context) -> bool:
+        if filesystem_effect_context is None:
+            raise PermissionError("filesystem_effect_context_required")
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+            if not path.parent.exists():
+                filesystem_effect_context.execute_path("history_parent_create", "FS_CREATE_DIR", path.parent)
+            filesystem_effect_context.execute_path(
+                "history_append", "FS_APPEND_BYTES", path,
+                payload=(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8"),
+            )
             return True
+        except PermissionError:
+            raise
         except Exception:
             return False
 
@@ -150,7 +163,7 @@ class DistributedCivilizationalMemory:
             })
         return nodes
 
-    def _persist_replicas(self, replicas):
+    def _persist_replicas(self, replicas, filesystem_effect_context):
         written = 0
         hashes = []
         for replica in replicas:
@@ -160,12 +173,12 @@ class DistributedCivilizationalMemory:
             payload["written_at_utc"] = self._now()
             payload_hash = self._stable_hash(payload)
             payload["replica_hash"] = payload_hash
-            if self._write_json(path, payload):
+            if self._write_json(path, payload, filesystem_effect_context):
                 written += 1
                 hashes.append(payload_hash)
         return written, hashes
 
-    def step(self, state=None):
+    def step(self, state=None, persist=False, filesystem_effect_context=None):
         state = state or {}
         timestamp = self._now()
         node = self._node_identity()
@@ -208,7 +221,12 @@ class DistributedCivilizationalMemory:
         eval_state.setdefault("fragmentation_pressure", self._bounded(1.0 - replica_health_ratio))
         evaluation = self.evaluate(eval_state)
 
-        written_count, hashes = self._persist_replicas(replicas)
+        if persist and filesystem_effect_context is None:
+            raise PermissionError("filesystem_effect_context_required")
+        if persist:
+            written_count, hashes = self._persist_replicas(replicas, filesystem_effect_context)
+        else:
+            written_count, hashes = 0, []
         unique_hash_ratio = self._bounded(len(set(hashes)) / max(1, len(hashes))) if hashes else 0.0
         distributed_memory_sync_ratio = self._bounded((availability_ratio + replica_health_ratio + (1.0 - abs(1.0 - unique_hash_ratio))) / 3.0)
         memory_recovery_success_rate = self._bounded((replica_health_ratio + failure_resistance + corruption_resistance) / 3.0)
@@ -256,6 +274,10 @@ class DistributedCivilizationalMemory:
                 "supports_future_phases": ["F5", "F6", "F7", "F8", "F12"],
             },
         }
-        result["registry_written"] = self._write_json(self.registry_path, result)
-        result["history_written"] = self._append_jsonl(self.history_path, result)
+        if persist:
+            result["registry_written"] = self._write_json(self.registry_path, result, filesystem_effect_context)
+            result["history_written"] = self._append_jsonl(self.history_path, result, filesystem_effect_context)
+        else:
+            result["registry_written"] = False
+            result["history_written"] = False
         return result

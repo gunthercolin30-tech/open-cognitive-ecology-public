@@ -3,10 +3,38 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
+from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+def _p162g6_execute_evidence_write(bridge, decision, slot, path, payload, evidence_role):
+    # Exact evidence write; never an authority source.
+    if bridge is None or decision is None:
+        raise RuntimeError("governed_evidence_bridge_and_decision_required")
+    ctx = getattr(bridge, "filesystem_context", None)
+    root_path = getattr(ctx, "root_path", None)
+    if root_path is None:
+        raise RuntimeError("filesystem_context_root_path_required")
+    root = Path(root_path).expanduser().resolve()
+    target = Path(path).expanduser()
+    if not target.is_absolute():
+        target = root / target
+    try:
+        relative = target.resolve(strict=False).relative_to(root).as_posix()
+    except ValueError as exc:
+        raise RuntimeError("evidence_target_outside_governed_root") from exc
+    result = bridge.execute_path(
+        decision=decision,
+        evidence_role=evidence_role,
+        slot=slot,
+        operation_id="FS_WRITE_REPLACE_BYTES",
+        path=relative,
+        payload=payload,
+    )
+    if not isinstance(result, dict) or result.get("status") != "EVIDENCE_EFFECT_CONFIRMED":
+        raise RuntimeError("evidence_effect_not_confirmed")
+    return result
 
 
 class ScientificPublicationTraceability:
@@ -200,10 +228,10 @@ class ScientificPublicationTraceability:
         }
         return scores, details
 
-    def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    def _write_json(self, path: Path, payload: dict[str, Any], evidence_bridge, evidence_decision) -> None:
+        _p162g6_execute_evidence_write(evidence_bridge, evidence_decision, "publication_state_write", path, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"), "EVIDENCE_REPORT_EXPORT")
 
-    def _write_prometheus(self, path: Path, result: dict[str, Any]) -> None:
+    def _write_prometheus(self, path: Path, result: dict[str, Any], evidence_bridge, evidence_decision) -> None:
         metrics = {
             "oce_scientific_publication_traceability_score": result["publication_traceability_score"],
             "oce_publication_archive_score": result["component_scores"]["publication_archive_score"],
@@ -216,9 +244,9 @@ class ScientificPublicationTraceability:
         for name, value in metrics.items():
             lines.append(f"# TYPE {name} gauge")
             lines.append(f"{name} {float(value):.6f}")
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _p162g6_execute_evidence_write(evidence_bridge, evidence_decision, "publication_prometheus_write", path, ("\n".join(lines) + "\n").encode("utf-8"), "EVIDENCE_REPORT_EXPORT")
 
-    def _write_dashboard(self, path: Path, result: dict[str, Any]) -> None:
+    def _write_dashboard(self, path: Path, result: dict[str, Any], evidence_bridge, evidence_decision) -> None:
         rows = "\n".join(
             f"<tr><td>{key}</td><td>{value:.4f}</td></tr>"
             for key, value in result["component_scores"].items()
@@ -234,9 +262,9 @@ class ScientificPublicationTraceability:
 <p>Publication confidence index: {result['publication_confidence_index']:.4f}</p>
 <table><tr><th>Component</th><th>Score</th></tr>{rows}</table>
 </body></html>"""
-        path.write_text(html, encoding="utf-8")
+        _p162g6_execute_evidence_write(evidence_bridge, evidence_decision, "publication_dashboard_write", path, html.encode("utf-8"), "EVIDENCE_REPORT_EXPORT")
 
-    def step(self, publication_context: dict[str, Any] | None = None, persist: bool = True) -> dict[str, Any]:
+    def step(self, publication_context: dict[str, Any] | None = None, persist: bool = True, evidence_bridge=None, evidence_decisions=None) -> dict[str, Any]:
         context = self._detect_context()
         override_used = publication_context is not None
         if publication_context:
@@ -303,11 +331,12 @@ class ScientificPublicationTraceability:
             result["state_path"] = str(state_path)
             result["prometheus_path"] = str(prometheus_path)
             result["dashboard_path"] = str(dashboard_path)
-            self._write_json(state_path, result)
+            decisions = evidence_decisions or {}
+            self._write_json(state_path, result, evidence_bridge, decisions.get("publication_state_write"))
             with history_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n")
-            self._write_prometheus(prometheus_path, result)
-            self._write_dashboard(dashboard_path, result)
+            self._write_prometheus(prometheus_path, result, evidence_bridge, decisions.get("publication_prometheus_write"))
+            self._write_dashboard(dashboard_path, result, evidence_bridge, decisions.get("publication_dashboard_write"))
 
         return result
 

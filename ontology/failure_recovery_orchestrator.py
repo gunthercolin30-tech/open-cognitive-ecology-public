@@ -83,8 +83,17 @@ class FailureRecoveryOrchestrator:
     subjectivity claim.
     """
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        root: Optional[Path] = None,
+        recovery_meta_analysis_archive_dir=None,
+        recovery_meta_analysis_fs_context=None,
+        filesystem_effect_context_provider=None,
+    ) -> None:
         self.root = Path(root) if root is not None else Path.home() / "open-cognitive-ecology"
+        self.recovery_meta_analysis_archive_dir = recovery_meta_analysis_archive_dir
+        self.recovery_meta_analysis_fs_context = recovery_meta_analysis_fs_context
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
         continuity_root = _ssd_continuity_root()
         if continuity_root is not None:
             self.recovery_root = continuity_root / "distributed_snapshots" / "failure_recovery"
@@ -122,11 +131,18 @@ class FailureRecoveryOrchestrator:
             "missing_dependency_count": len(missing),
         }
 
-    def _call_component(self, module_name: str, class_name: str, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+    def _call_component(
+        self,
+        module_name: str,
+        class_name: str,
+        *args: Any,
+        constructor_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
         try:
             module = __import__(f"ontology.{module_name}", fromlist=[class_name])
             cls = getattr(module, class_name)
-            obj = cls()
+            obj = cls(**dict(constructor_kwargs or {}))
             if hasattr(obj, "step"):
                 result = obj.step(*args, **kwargs)
                 if isinstance(result, dict):
@@ -291,6 +307,21 @@ class FailureRecoveryOrchestrator:
         state.setdefault("active_node_count", 0)
         return state
 
+    def _governed_write_replace(self, path: Path, payload: bytes, slot: str) -> None:
+        provider = self.filesystem_effect_context_provider
+        if not callable(provider):
+            raise RuntimeError("filesystem_effect_context_provider_required")
+        context = provider("FS_WRITE_REPLACE_BYTES", path, slot)
+        if context is None:
+            raise RuntimeError("preissued_filesystem_effect_context_required")
+        context.begin()
+        remaining = context.remaining()
+        if remaining.get(slot, 0) != 1 or sum(remaining.values()) != 1:
+            raise RuntimeError("exactly_one_recovery_write_authority_required")
+        context.execute_path(slot, "FS_WRITE_REPLACE_BYTES", path, payload=payload)
+        if any(context.remaining().values()):
+            raise RuntimeError("recovery_write_authority_not_fully_consumed")
+
     def _create_snapshot(self, recovery_id: str, state: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         snapshot_id = inputs.get("snapshot_id") or f"SNAP-{recovery_id}"
         snapshot_path = self.snapshot_root / f"{snapshot_id}.json"
@@ -314,7 +345,7 @@ class FailureRecoveryOrchestrator:
                 "snapshot_checksum": "",
                 "snapshot_error": "snapshot_missing_simulated",
             }
-        snapshot_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        self._governed_write_replace(snapshot_path, json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"), "macro04_recovery_snapshot")
         return {
             "snapshot_id": snapshot_id,
             "snapshot_created": True,
@@ -358,7 +389,7 @@ class FailureRecoveryOrchestrator:
                 "expected_checksum": expected,
                 "state": state if integrity else {},
             }
-            restoration_path.write_text(json.dumps(restoration_payload, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+            self._governed_write_replace(restoration_path, json.dumps(restoration_payload, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"), "macro04_recovery_restoration")
             return {
                 "snapshot_restored": integrity,
                 "snapshot_integrity_validated": integrity,
@@ -535,8 +566,24 @@ class FailureRecoveryOrchestrator:
             detection=detection,
             inputs=inputs,
         )
-        distribution = self._call_component("resilience_distribution_analyzer", "ResilienceDistributionAnalyzer", recovery_runs)
-        longitudinal = self._call_component("longitudinal_recovery_observer", "LongitudinalRecoveryObserver", recovery_runs)
+        distribution = self._call_component(
+            "resilience_distribution_analyzer",
+            "ResilienceDistributionAnalyzer",
+            recovery_runs,
+            constructor_kwargs={
+                "meta_analysis_archive_dir": self.recovery_meta_analysis_archive_dir,
+                "meta_analysis_fs_context": self.recovery_meta_analysis_fs_context,
+            },
+        )
+        longitudinal = self._call_component(
+            "longitudinal_recovery_observer",
+            "LongitudinalRecoveryObserver",
+            recovery_runs,
+            constructor_kwargs={
+                "meta_analysis_archive_dir": self.recovery_meta_analysis_archive_dir,
+                "meta_analysis_fs_context": self.recovery_meta_analysis_fs_context,
+            },
+        )
 
         distribution_score = float(
             _safe_get(

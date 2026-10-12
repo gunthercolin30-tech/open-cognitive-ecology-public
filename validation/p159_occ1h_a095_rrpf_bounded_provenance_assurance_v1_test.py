@@ -1,0 +1,5 @@
+from ontology.occ1h_a095_rrpf_bounded_provenance_assurance import experiment
+def test_functional(): r=experiment(); assert r["experiment_passed"] and r["experiment_cases"]["intact"]=="ACCEPTED" and r["rrp21"]=="BOUNDED_NON_PRODUCTION_CROSS_LAYER_PROVENANCE_ASSURANCE_EXPERIMENT_EXECUTED"
+def test_degradation(): r=experiment(); assert all(r["experiment_cases"][k]=="REJECTED_FAIL_CLOSED" for k in ("provider_to_theory_substitution","theory_to_policy_substitution","cross_layer_identity_mismatch","missing_provenance","ambiguous_provenance"))
+def test_requalification(): r=experiment(); assert r["rrp22"]=="INDEPENDENT_REQUALIFICATION_SUPPORTS_RETURN_TO_RRP9_12" and r["return_to_rrp9_12"] and r["post_resolution_qualification"]=="BOUNDED_SURROGATE_END_TO_END_PROVENANCE_ASSURANCE_DEMONSTRATED"
+def test_nonregression(): r=experiment(); assert r["current_verdict"]=="INCONCLUSIVE" and not r["production_runtime_modified"] and not r["production_cross_layer_path_materialized"] and not r["criticality_changed"] and not r["occ1h_closed"] and not r["p159_final_lock"] and not r["p160_opened"]

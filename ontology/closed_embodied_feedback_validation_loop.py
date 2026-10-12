@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
 from typing import Any
+from ontology.governed_evidence_effect_policy import GovernedEvidenceEffectPolicy, EvidenceEffectDecision
+from ontology.governed_evidence_filesystem_bridge import GovernedEvidenceFilesystemBridge
 
 ROOT = Path.home() / "open-cognitive-ecology"
 ARCHIVE_DIR = ROOT / "closed_embodied_feedback_validation"
@@ -77,14 +79,22 @@ def _load_json(path: Path, default: Any) -> Any:
         pass
     return default
 
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+def _relative_effect_path(context: Any, path: Path) -> str:
+    root_path = Path(getattr(context, "root_path", ROOT)).resolve()
+    try:
+        return str(path.resolve().relative_to(root_path))
+    except ValueError as exc:
+        raise RuntimeError("filesystem_effect_path_outside_registered_root") from exc
 
-def _append_jsonl(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+def _write_json(context: Any, slot: str, path: Path, payload: Any) -> None:
+    rel = _relative_effect_path(context, path)
+    data = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    context.execute_path(slot=slot, operation_id="FS_WRITE_REPLACE_BYTES", path=rel, payload=data)
+
+def _append_jsonl(bridge: GovernedEvidenceFilesystemBridge, decision: EvidenceEffectDecision, slot: str, path: Path, payload: Any) -> None:
+    rel = _relative_effect_path(bridge.filesystem_context, path)
+    data = (json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+    bridge.execute_path(decision=decision, evidence_role=decision.evidence_role, slot=slot, operation_id="FS_APPEND_BYTES", path=rel, payload=data)
 
 def _flatten_action_sources(inputs: dict[str, Any]) -> dict[str, Any]:
     execution = _as_dict(inputs.get("execution_result") or inputs.get("governed_execution"))
@@ -183,7 +193,7 @@ class ClosedEmbodiedFeedbackValidationLoop:
         self.latest_path = self.archive_dir / "latest_closed_embodied_feedback_validation_loop.json"
         self.index_path = self.archive_dir / "closed_embodied_feedback_validation_loop_index.json"
 
-    def step(self, inputs: dict[str, Any] | None = None, persist: bool = True) -> dict[str, Any]:
+    def step(self, inputs: dict[str, Any] | None = None, persist: bool = True, filesystem_context: Any = None, evidence_decisions: dict[str, EvidenceEffectDecision] | None = None) -> dict[str, Any]:
         payload = _as_dict(inputs)
         if not payload:
             payload = _derive_default_inputs()
@@ -317,9 +327,19 @@ class ClosedEmbodiedFeedbackValidationLoop:
         }
 
         if persist:
-            _append_jsonl(self.history_path, result)
-            _write_json(self.latest_path, result)
-            _write_json(self.index_path, index)
+            if filesystem_context is None:
+                raise RuntimeError("governed_filesystem_context_required")
+            decisions = evidence_decisions or {}
+            history_decision = decisions.get("history_append")
+            if not isinstance(history_decision, EvidenceEffectDecision):
+                raise RuntimeError("history_append_evidence_decision_required")
+            filesystem_context.begin()
+            bridge = GovernedEvidenceFilesystemBridge(GovernedEvidenceEffectPolicy(), filesystem_context)
+            _append_jsonl(bridge, history_decision, "history_append", self.history_path, result)
+            _write_json(filesystem_context, "latest_write", self.latest_path, result)
+            _write_json(filesystem_context, "index_write", self.index_path, index)
+            if any(filesystem_context.remaining().values()):
+                raise RuntimeError("unused_filesystem_effect_authority")
             result["persisted"] = True
 
         return result

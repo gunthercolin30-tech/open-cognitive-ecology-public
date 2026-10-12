@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +8,8 @@ from typing import Any
 
 from ontology.distributed_state_diff_engine import DistributedStateDiffEngine
 from ontology.civilizational_state_merger import CivilizationalStateMerger
+from ontology.ssh_scp_remote_state_exact_contract import RemoteStateOperationSpec, OP_REMOTE_MKDIR, OP_REMOTE_STATE_PUSH, OP_REMOTE_STATE_PULL
+from ontology.governed_ssh_scp_remote_state_transport import run_remote_state_operation
 
 PRIMITIVE = "LIVE_STATE_SYNCHRONIZER"
 
@@ -29,7 +30,6 @@ class LiveStateSynchronizer:
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or Path.home() / "open-cognitive-ecology"
         self.state_dir = self.root / "distributed_state"
-        self.state_dir.mkdir(parents=True, exist_ok=True)
         self.local_state_path = self.state_dir / "local_live_state.json"
         self.remote_echo_path = self.state_dir / "remote_live_state_echo.json"
         self.merged_state_path = self.state_dir / "merged_live_state.json"
@@ -56,9 +56,11 @@ class LiveStateSynchronizer:
             return fallback
         return fallback
 
-    def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
+    def _write_json(self, path: Path, payload: dict[str, Any], *, filesystem_context: Any, slot: str) -> None:
+        if filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required")
+        filesystem_context.execute_path(slot=slot + "_parent", operation_id="FS_CREATE_DIR", path=path.parent)
+        filesystem_context.execute_path(slot=slot, operation_id="FS_WRITE_REPLACE_BYTES", path=path, payload=json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False).encode("utf-8"))
 
     def _ssh_roundtrip(
         self,
@@ -68,44 +70,32 @@ class LiveStateSynchronizer:
         timeout_seconds: int,
         batch_mode: bool = False,
     ) -> dict[str, Any]:
-        target = f"{user}@{host}"
-        remote_dir = f"{remote_root.rstrip('/')}/distributed_state"
-        remote_file = f"{remote_dir}/remote_live_state_echo.json"
-
-        ssh_options = ["-o", f"ConnectTimeout={timeout_seconds}"]
-        scp_options = ["-o", f"ConnectTimeout={timeout_seconds}"]
-        transport_mode = "ssh_scp_password_or_key"
-        if batch_mode:
-            ssh_options = ["-o", "BatchMode=yes", *ssh_options]
-            scp_options = ["-o", "BatchMode=yes", *scp_options]
-            transport_mode = "ssh_scp_batch_key_only"
-
-        subprocess.run(
-            ["ssh", *ssh_options, target, "mkdir", "-p", remote_dir],
-            check=True,
-            timeout=timeout_seconds,
+        transport_mode = "ssh_scp_batch_key_only" if batch_mode else "ssh_scp_password_or_key"
+        common = dict(
+            host=host,
+            user=user,
+            remote_root=remote_root,
+            timeout_seconds=timeout_seconds,
+            batch_mode=batch_mode,
+            local_state_path=str(self.local_state_path),
+            remote_echo_path=str(self.remote_echo_path),
         )
-        subprocess.run(
-            ["scp", *scp_options, "-q", str(self.local_state_path), f"{target}:{remote_file}"],
-            check=True,
-            timeout=timeout_seconds,
-        )
-        subprocess.run(
-            ["scp", *scp_options, "-q", f"{target}:{remote_file}", str(self.remote_echo_path)],
-            check=True,
-            timeout=timeout_seconds,
-        )
+        run_remote_state_operation(RemoteStateOperationSpec(operation_id=OP_REMOTE_MKDIR, **common))
+        run_remote_state_operation(RemoteStateOperationSpec(operation_id=OP_REMOTE_STATE_PUSH, **common))
+        run_remote_state_operation(RemoteStateOperationSpec(operation_id=OP_REMOTE_STATE_PULL, **common))
         return {"transport_success": True, "transport_mode": transport_mode}
 
-    def step(self, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
+    def step(self, inputs: dict[str, Any] | None = None, *, filesystem_context: Any = None) -> dict[str, Any]:
         started = time.perf_counter()
         inputs = inputs or {}
+        if filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required")
 
         local_state = dict(inputs.get("local_state") or self._default_state("macos-arm64-node-a"))
         remote_state = dict(inputs.get("remote_state") or self._default_state("ubuntu-arm64-node-b"))
 
-        self._write_json(self.local_state_path, local_state)
-        self._write_json(self.remote_echo_path, remote_state)
+        self._write_json(self.local_state_path, local_state, filesystem_context=filesystem_context, slot="local_state_write")
+        self._write_json(self.remote_echo_path, remote_state, filesystem_context=filesystem_context, slot="remote_echo_write")
 
         transport_success = True
         transport_mode = "local_simulated"
@@ -132,7 +122,7 @@ class LiveStateSynchronizer:
 
         diff_result = DistributedStateDiffEngine().step({"node_a": local_state, "node_b": remote_state})
         merge_result = CivilizationalStateMerger().step({"node_a": local_state, "node_b": remote_state})
-        self._write_json(self.merged_state_path, merge_result["merged_state"])
+        self._write_json(self.merged_state_path, merge_result["merged_state"], filesystem_context=filesystem_context, slot="merged_state_write")
 
         latency_ms = round((time.perf_counter() - started) * 1000.0, 3)
         state_consistency_index = diff_result["state_consistency_index"]
@@ -163,6 +153,6 @@ class LiveStateSynchronizer:
                 "non_closure_compliant": True,
             },
         }
-        with self.history_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(result, sort_keys=True, ensure_ascii=False) + "\n")
+        filesystem_context.execute_path(slot="history_parent", operation_id="FS_CREATE_DIR", path=self.history_path.parent)
+        filesystem_context.execute_path(slot="history_append", operation_id="FS_APPEND_BYTES", path=self.history_path, payload=(json.dumps(result, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
         return result

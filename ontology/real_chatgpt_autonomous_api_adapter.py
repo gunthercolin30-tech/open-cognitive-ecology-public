@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from ontology.governed_network_effector import GovernedNetworkEffector, GovernedNetworkRequest, UrllibTrustedTransport
+
 import hashlib
 import json
 import os
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -43,6 +43,8 @@ def _safe_int(value: Any, default: int, low: int, high: int) -> int:
     return max(low, min(high, number))
 
 
+P162_G63B4C_AUTH_NETWORK_MEDIATED = True
+
 class RealChatGPTAutonomousAPIAdapter:
     """F9-R5 governed autonomous ChatGPT/OpenAI API adapter.
 
@@ -56,11 +58,26 @@ class RealChatGPTAutonomousAPIAdapter:
         self.result_dir = self.root / "external_collaboration" / "real_chatgpt_api"
         self.result_dir.mkdir(parents=True, exist_ok=True)
 
-    def _append_jsonl(self, path: Path, obj: Dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n")
+        self.governed_network_context = None
 
+    def set_governed_network_context(self, context: Optional[Dict[str, Any]]) -> None:
+        self.governed_network_context = context
+
+    def _p162_governed_network(self):
+        context = self.governed_network_context
+        if not isinstance(context, dict) or context.get("handle") is None or context.get("brokered_use") is None:
+            raise PermissionError("governed_brokered_network_context_required")
+        effector = context.get("effector") or GovernedNetworkEffector(
+            transport=UrllibTrustedTransport(), credential_resolver=context.get("credential_resolver"))
+        return context, effector
+
+
+    def _append_jsonl(self, path: Path, obj: Dict[str, Any], fs_context=None) -> None:
+        if fs_context is None:
+            raise PermissionError("JSONL append requires preissued filesystem effect context")
+        data = (json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        fs_context.execute_path("jsonl_parent_create", "FS_CREATE_DIR", path.parent)
+        fs_context.execute_path("jsonl_append", "FS_APPEND_BYTES", path, data)
     def _extract_output_text(self, data: Dict[str, Any]) -> str:
         if isinstance(data.get("output_text"), str):
             return data["output_text"].strip()
@@ -117,7 +134,7 @@ class RealChatGPTAutonomousAPIAdapter:
             "max_output_tokens": max_output_tokens,
         }
 
-    def step(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def step(self, payload: Optional[Dict[str, Any]] = None, fs_context=None) -> Dict[str, Any]:
         payload = dict(payload or {})
         prompt = str(payload.get("prompt") or payload.get("external_prompt") or "").strip()
         query_id = str(payload.get("query_id") or _hash(f"openai|{time.time()}", "OPENAIQ"))
@@ -125,7 +142,7 @@ class RealChatGPTAutonomousAPIAdapter:
         timeout = _safe_int(payload.get("timeout_seconds") or os.environ.get("OCE_OPENAI_TIMEOUT_SECONDS"), 60, 5, 300)
         started = time.time()
 
-        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        brokered_credential_available = bool(isinstance(self.governed_network_context, dict) and self.governed_network_context.get("brokered_use") is not None)
         endpoint = str(os.environ.get("OCE_OPENAI_RESPONSES_ENDPOINT") or "https://api.openai.com/v1/responses")
 
         if not prompt:
@@ -141,96 +158,77 @@ class RealChatGPTAutonomousAPIAdapter:
                 "failure_reason": "empty_prompt",
                 "credentials_stored": False,
                 "browser_automation": False,
-                "api_key_present": bool(api_key),
+                "brokered_credential_available": brokered_credential_available,
                 "latency": round(time.time() - started, 6),
             }
-            self._append_jsonl(self.history_path, result)
+            self._append_jsonl(self.history_path, result, fs_context=fs_context)
             return result
 
-        if not api_key:
-            result = {
-                "primitive": PRIMITIVE,
-                "timestamp_utc": _utc(),
-                "success": False,
-                "provider": provider,
-                "adapter_mode": "openai_api_adapter_missing_key",
-                "query_id": query_id,
-                "response_text": "",
-                "response_length": 0,
-                "failure_reason": "OPENAI_API_KEY_not_set",
-                "credentials_stored": False,
-                "browser_automation": False,
-                "api_key_present": False,
-                "latency": round(time.time() - started, 6),
-            }
-            self._append_jsonl(self.history_path, result)
+        if not brokered_credential_available:
+            result = {"primitive":PRIMITIVE,"timestamp_utc":_utc(),"success":False,"provider":provider,
+                      "adapter_mode":"openai_api_adapter_governed","query_id":query_id,"response_text":"",
+                      "response_length":0,"failure_reason":"governed_brokered_network_context_required",
+                      "credentials_stored":False,"browser_automation":False,
+                      "brokered_credential_available":False,"raw_secret_observed":False,
+                      "latency":round(time.time()-started,6)}
+            self._append_jsonl(self.history_path,result, fs_context=fs_context)
             return result
 
         body = self._build_request_body(prompt, payload)
         raw = json.dumps(body).encode("utf-8")
-        request = urllib.request.Request(
-            endpoint,
-            data=raw,
-            method="POST",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "Open-Cognitive-Ecology-F9-R5/1.0",
-            },
-        )
+        context, effector = self._p162_governed_network()
 
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                response_body = response.read().decode("utf-8", errors="replace")
-                status_code = int(getattr(response, "status", 200))
-            data = json.loads(response_body)
-            response_text = self._extract_output_text(data)
-            success = bool(response_text.strip()) and 200 <= status_code < 300
-            result = {
-                "primitive": PRIMITIVE,
-                "timestamp_utc": _utc(),
-                "success": success,
-                "provider": provider,
-                "adapter_mode": "openai_api_adapter",
-                "query_id": query_id,
-                "model": body.get("model"),
-                "status_code": status_code,
-                "response_text": response_text,
-                "response_length": len(response_text),
-                "response_hash": _hash(response_text, "RESP"),
-                "raw_response_id": data.get("id"),
-                "credentials_stored": False,
-                "browser_automation": False,
-                "api_key_present": True,
-                "api_key_stored": False,
-                "latency": round(time.time() - started, 6),
-                "diagnostics": {
-                    "endpoint": endpoint,
+            effect = effector.execute(
+                request=GovernedNetworkRequest("POST", endpoint,
+                    {"Content-Type":"application/json","User-Agent":"Open-Cognitive-Ecology-F9-R5/1.0"},
+                    raw, timeout_seconds=float(timeout), idempotent=False),
+                handle=context.get("handle"), brokered_use=context.get("brokered_use"),
+                adapter_id=context.get("adapter_id"), effector_id=context.get("effector_id"),
+                now_iso=context.get("now_iso"))
+            effect_status=effect.get("status")
+            if effect_status != "EFFECT_CONFIRMED":
+                result={"primitive":PRIMITIVE,"timestamp_utc":_utc(),"success":False,"provider":provider,
+                        "adapter_mode":"openai_api_adapter_governed","query_id":query_id,"response_text":"",
+                        "response_length":0,"failure_reason":"governed_network_effect:"+str(effect_status),
+                        "effect_status":effect_status,
+                        "effect_state_indeterminate":effect_status=="EFFECT_STATE_INDETERMINATE",
+                        "retry_allowed":bool(effect.get("retry_allowed",False)),"credentials_stored":False,
+                        "browser_automation":False,"brokered_credential_available":True,
+                        "raw_secret_observed":False,"latency":round(time.time()-started,6)}
+            else:
+                transport_result=effect.get("transport_result") or {}
+                response_body=transport_result.get("body",b"")
+                if isinstance(response_body,bytes): response_body=response_body.decode("utf-8",errors="replace")
+                status_code=int(transport_result.get("status_code",200) or 200)
+                data=json.loads(response_body)
+                response_text = self._extract_output_text(data)
+                success = bool(response_text.strip()) and 200 <= status_code < 300
+                result = {
+                    "primitive": PRIMITIVE,
+                    "timestamp_utc": _utc(),
+                    "success": success,
+                    "provider": provider,
+                    "adapter_mode": "openai_api_adapter",
+                    "query_id": query_id,
+                    "model": body.get("model"),
+                    "status_code": status_code,
+                    "response_text": response_text,
+                    "response_length": len(response_text),
+                    "response_hash": _hash(response_text, "RESP"),
                     "raw_response_id": data.get("id"),
-                    "output_item_count": len(data.get("output", []) or []),
-                    "secret_policy": "OPENAI_API_KEY_read_from_environment_only",
-                },
-            }
-        except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace")[:2000]
-            result = {
-                "primitive": PRIMITIVE,
-                "timestamp_utc": _utc(),
-                "success": False,
-                "provider": provider,
-                "adapter_mode": "openai_api_adapter",
-                "query_id": query_id,
-                "status_code": int(getattr(exc, "code", 0) or 0),
-                "response_text": "",
-                "response_length": 0,
-                "failure_reason": f"HTTPError:{getattr(exc, 'code', 'unknown')}",
-                "error_body": error_body,
-                "credentials_stored": False,
-                "browser_automation": False,
-                "api_key_present": True,
-                "api_key_stored": False,
-                "latency": round(time.time() - started, 6),
-            }
+                    "credentials_stored": False,
+                    "browser_automation": False,
+                    "brokered_credential_available": True,
+                    "raw_secret_observed": False,
+                    "latency": round(time.time() - started, 6),
+                    "diagnostics": {
+                        "endpoint": endpoint,
+                        "raw_response_id": data.get("id"),
+                        "output_item_count": len(data.get("output", []) or []),
+                        "secret_policy": "brokered_credential_ref_resolved_inside_trusted_effector_TCB_only",
+                    },
+                }
         except Exception as exc:
             result = {
                 "primitive": PRIMITIVE,
@@ -244,8 +242,8 @@ class RealChatGPTAutonomousAPIAdapter:
                 "failure_reason": f"{type(exc).__name__}: {exc}",
                 "credentials_stored": False,
                 "browser_automation": False,
-                "api_key_present": True,
-                "api_key_stored": False,
+                "brokered_credential_available": True,
+                "raw_secret_observed": False,
                 "latency": round(time.time() - started, 6),
             }
 
@@ -254,7 +252,7 @@ class RealChatGPTAutonomousAPIAdapter:
         safe_result.pop("error_body", None)  # history keeps status; avoids noisy provider diagnostics in result files.
         result_path.write_text(json.dumps(safe_result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         result["record_path"] = str(result_path)
-        self._append_jsonl(self.history_path, result)
+        self._append_jsonl(self.history_path, result, fs_context=fs_context)
         return result
 
 

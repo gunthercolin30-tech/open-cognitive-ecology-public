@@ -37,12 +37,26 @@ class InteractionQueueManager:
         root: Path | None = None,
         queue_file: Path | None = None,
         history_file: Path | None = None,
+            filesystem_effect_context_provider: Any = None,
     ) -> None:
         self.root = Path(root) if root is not None else Path.home() / "open-cognitive-ecology"
         self.queue_file = Path(queue_file) if queue_file is not None else self.root / "external_query_queue.jsonl"
         self.history_file = Path(history_file) if history_file is not None else self.root / "collaboration_history.jsonl"
-        self.queue_file.parent.mkdir(parents=True, exist_ok=True)
-        self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
+        self._ensure_governed_parent(self.queue_file.parent, "p162g6_c03_queue_parent_create")
+        self._ensure_governed_parent(self.history_file.parent, "p162g6_c03_history_parent_create")
+
+    def _ensure_governed_parent(self, parent: Path, slot: str) -> None:
+        if parent.exists():
+            return
+        provider = self.filesystem_effect_context_provider
+        if not callable(provider):
+            raise RuntimeError("filesystem_effect_context_provider_required")
+        context = provider("FS_CREATE_DIR", parent)
+        if context is None:
+            raise RuntimeError("filesystem_effect_context_required")
+        context.begin()
+        context.execute_path(slot, "FS_CREATE_DIR", parent)
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat()

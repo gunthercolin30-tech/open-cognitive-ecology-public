@@ -15,6 +15,7 @@ membership certification, revocability, persistence, and auditable history.
 
 
 from __future__ import annotations
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -140,10 +141,13 @@ class CommunityNodeOnboarding:
                 return default
         return default
 
-    def _write_json(self, path: Path, payload: Dict[str, Any]) -> bool:
+    def _write_json(self, path: Path, payload: Dict[str, Any], fs_context: GovernedFilesystemEffectContext | None = None) -> bool:
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            if fs_context is None:
+                raise PermissionError("persisted JSON write requires preissued filesystem effect context")
+            data = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+            fs_context.execute_path("json_parent_create", "FS_CREATE_DIR", path.parent)
+            fs_context.execute_path("json_write", "FS_WRITE_BYTES", path, data)
             return True
         except Exception:
             return False
@@ -240,7 +244,7 @@ class CommunityNodeOnboarding:
         actions.append("reject_and_request_remediation")
         return "rejected", "not_admitted", False, False, reasons, actions
 
-    def _update_registry(self, record: Dict[str, Any]) -> Dict[str, Any]:
+    def _update_registry(self, record: Dict[str, Any], fs_context: GovernedFilesystemEffectContext | None = None) -> Dict[str, Any]:
         registry = self._read_json(self.registry_path, {"primitive": PRIMITIVE, "community_nodes": {}})
         if not isinstance(registry, dict):
             registry = {"primitive": PRIMITIVE, "community_nodes": {}}
@@ -272,7 +276,7 @@ class CommunityNodeOnboarding:
         registry["active_community_node_count"] = len(active_nodes)
         registry["certified_community_node_count"] = sum(1 for node in nodes.values() if node.get("certified"))
         registry["updated_at_utc"] = _now()
-        self._write_json(self.registry_path, registry)
+        self._write_json(self.registry_path, registry, fs_context)
         return registry
 
     def step(self, candidate: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

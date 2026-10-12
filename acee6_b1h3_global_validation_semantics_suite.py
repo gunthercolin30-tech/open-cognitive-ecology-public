@@ -1,0 +1,11 @@
+from acee6_b1_unknown_scope_fail_closed_test import *
+from acee6_b1_named_scope_resolution_test import *
+from acee6_b1_scope_isolation_test import *
+from acee6_b1_global_failure_propagation_test import *
+from acee6_b1_global_single_execution_test import *
+from acee6_b1_global_report_binding_test import *
+from acee6_b1_legacy_scope_non_regression_test import *
+from acee6_b1_default_scope_test import *
+from acee6_b1_global_completion_order_test import *
+from acee6_b1_validation_module_import_test import *
+print("ACEE6_B1H3_GLOBAL_VALIDATION_SEMANTICS_ALL_OK")

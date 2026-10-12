@@ -103,15 +103,16 @@ class DistributedAttentionStateExchange:
     def __init__(self, root: Path | str | None = None) -> None:
         self.root = Path(root) if root else Path.home() / 'open-cognitive-ecology'
         self.state_dir = self.root / 'distributed_attention_state'
-        self.state_dir.mkdir(parents=True, exist_ok=True)
         self.local_packet_path = self.state_dir / 'local_attention_state.json'
         self.remote_packet_path = self.state_dir / 'remote_attention_state_echo.json'
         self.merged_packet_path = self.state_dir / 'merged_attention_state.json'
         self.history_path = self.state_dir / 'distributed_attention_state_exchange_history.jsonl'
 
-    def _write_json(self, path: Path, payload: Mapping[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False), encoding='utf-8')
+    def _write_json(self, path: Path, payload: Mapping[str, Any], *, filesystem_context: Any, slot: str) -> None:
+        if filesystem_context is None:
+            raise RuntimeError('governed_filesystem_context_required')
+        filesystem_context.execute_path(slot=slot + '_parent', operation_id='FS_CREATE_DIR', path=path.parent)
+        filesystem_context.execute_path(slot=slot, operation_id='FS_WRITE_REPLACE_BYTES', path=path, payload=json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False).encode('utf-8'))
 
     def _read_json(self, path: Path, fallback: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -256,17 +257,19 @@ class DistributedAttentionStateExchange:
         consistency = same / len(keys)
         return consistency, 1.0 - consistency, {'diff_computed': False, 'unchanged_count': same, 'total_keys': len(keys)}
 
-    def step(self, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
+    def step(self, inputs: dict[str, Any] | None = None, *, filesystem_context: Any = None) -> dict[str, Any]:
         started = time.perf_counter()
         inputs = inputs or {}
+        if filesystem_context is None:
+            raise RuntimeError('governed_filesystem_context_required')
 
         local_node_id = str(inputs.get('local_node_id', 'macos-arm64-node-a'))
         remote_node_id = str(inputs.get('remote_node_id', 'ubuntu-arm64-node-b'))
         local_packet = dict(inputs.get('local_attention_state') or self._build_attention_state(inputs, local_node_id))
         remote_packet = dict(inputs.get('remote_attention_state') or local_packet | {'node_id': remote_node_id, 'updated_at_utc': _now()})
 
-        self._write_json(self.local_packet_path, local_packet)
-        self._write_json(self.remote_packet_path, remote_packet)
+        self._write_json(self.local_packet_path, local_packet, filesystem_context=filesystem_context, slot='local_packet_write')
+        self._write_json(self.remote_packet_path, remote_packet, filesystem_context=filesystem_context, slot='remote_packet_initial_write')
 
         transport_success = True
         transport_mode = 'local_simulated_attention_exchange'
@@ -278,7 +281,7 @@ class DistributedAttentionStateExchange:
                 f13_inputs = dict(inputs)
                 f13_inputs['local_state'] = local_packet
                 f13_inputs['remote_state'] = remote_packet
-                f13_result = LiveStateSynchronizer(root=self.root).step(f13_inputs)
+                f13_result = LiveStateSynchronizer(root=self.root).step(f13_inputs, filesystem_context=filesystem_context)
                 transport_success = bool(f13_result.get('transport_success'))
                 transport_mode = str(f13_result.get('transport_mode'))
                 transport_error = f13_result.get('transport_error')
@@ -286,7 +289,7 @@ class DistributedAttentionStateExchange:
                 echoed = self._read_json(self.root / 'distributed_state' / 'remote_live_state_echo.json', remote_packet)
                 if echoed.get('primitive') == PRIMITIVE or 'attention_metrics' in echoed:
                     remote_packet = echoed
-                    self._write_json(self.remote_packet_path, remote_packet)
+                    self._write_json(self.remote_packet_path, remote_packet, filesystem_context=filesystem_context, slot='remote_packet_refresh_write')
             except Exception as exc:
                 transport_success = False
                 transport_mode = 'attention_exchange_ssh_failed_fallback_local'
@@ -302,7 +305,7 @@ class DistributedAttentionStateExchange:
             'cross_node_attention_consistency': consistency,
             'distributed_attention_divergence_rate': divergence,
         }
-        self._write_json(self.merged_packet_path, merged_packet)
+        self._write_json(self.merged_packet_path, merged_packet, filesystem_context=filesystem_context, slot='merged_packet_write')
 
         latency_ms = round((time.perf_counter() - started) * 1000.0, 3)
         attention_sync_latency = latency_ms
@@ -337,6 +340,6 @@ class DistributedAttentionStateExchange:
                 'non_closure_compliant': True,
             },
         }
-        with self.history_path.open('a', encoding='utf-8') as handle:
-            handle.write(json.dumps(result, sort_keys=True, ensure_ascii=False) + '\n')
+        filesystem_context.execute_path(slot='history_parent', operation_id='FS_CREATE_DIR', path=self.history_path.parent)
+        filesystem_context.execute_path(slot='history_append', operation_id='FS_APPEND_BYTES', path=self.history_path, payload=(json.dumps(result, sort_keys=True, ensure_ascii=False) + '\n').encode('utf-8'))
         return result

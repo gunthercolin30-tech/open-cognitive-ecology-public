@@ -71,8 +71,9 @@ class CivilizationalReplicationEngine:
     subjectivity claim.
     """
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Optional[Path] = None, filesystem_effect_context_provider=None) -> None:
         self.root = Path(root) if root else ROOT
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
         continuity_root = _ssd_continuity_root()
         if continuity_root is not None:
             self.replication_root = continuity_root / "replication_packages"
@@ -116,6 +117,21 @@ class CivilizationalReplicationEngine:
         except Exception as exc:
             return {"primitive": module_name, "success": False, "error": repr(exc)}
 
+    def _governed_write_replace(self, path: Path, payload: bytes, slot: str) -> None:
+        provider = self.filesystem_effect_context_provider
+        if not callable(provider):
+            raise RuntimeError("filesystem_effect_context_provider_required")
+        context = provider("FS_WRITE_REPLACE_BYTES", path, slot)
+        if context is None:
+            raise RuntimeError("preissued_filesystem_effect_context_required")
+        context.begin()
+        remaining = context.remaining()
+        if remaining.get(slot, 0) != 1 or sum(remaining.values()) != 1:
+            raise RuntimeError("exactly_one_replication_write_authority_required")
+        context.execute_path(slot, "FS_WRITE_REPLACE_BYTES", path, payload=payload)
+        if any(context.remaining().values()):
+            raise RuntimeError("replication_write_authority_not_fully_consumed")
+
     def _make_package(self, inputs: Dict[str, Any], deps: Dict[str, Any]) -> Dict[str, Any]:
         package_id = inputs.get("package_id") or "CRP-" + hashlib.sha256(f"{time.time()}-{socket.gethostname()}".encode()).hexdigest()[:16]
         state = {
@@ -137,7 +153,7 @@ class CivilizationalReplicationEngine:
             "status": "ready",
         }
         package_path = self.replication_root / f"{package_id}.json"
-        package_path.write_text(json.dumps(package, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        self._governed_write_replace(package_path, json.dumps(package, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"), "macro04_replication_package")
         package["package_path"] = str(package_path)
         return package
 
@@ -243,7 +259,7 @@ class CivilizationalReplicationEngine:
             "expected_checksum": package["checksum"],
         }
         direction_path = self.cross_node_root / f"{package['package_id']}_{direction}.json"
-        direction_path.write_text(json.dumps(record, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        self._governed_write_replace(direction_path, json.dumps(record, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"), "macro04_replication_direction")
         record["direction_record_path"] = str(direction_path)
         return record
 

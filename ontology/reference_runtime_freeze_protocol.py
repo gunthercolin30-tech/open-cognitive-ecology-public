@@ -8,7 +8,7 @@ from pathlib import Path
 import hashlib
 import json
 import shutil
-import subprocess
+from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
 from typing import Any
 
 
@@ -118,6 +118,24 @@ class ReferenceRuntimeFreezeProtocol:
         }
 
 
+    filesystem_effect_context_provider: Any = None
+
+    def _governed_export_json(self, output: Path, data: Any, slot: str) -> None:
+        provider = self.filesystem_effect_context_provider
+        if not callable(provider):
+            raise RuntimeError("filesystem_effect_context_provider_required")
+        context = provider("FS_WRITE_REPLACE_BYTES", output, slot)
+        if context is None:
+            raise RuntimeError("preissued_filesystem_effect_context_required")
+        context.begin()
+        remaining = context.remaining()
+        if remaining.get(slot, 0) != 1 or sum(remaining.values()) != 1:
+            raise RuntimeError("exactly_one_write_replace_authority_required")
+        payload = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
+        context.execute_path(slot, "FS_WRITE_REPLACE_BYTES", output, payload=payload)
+        if any(context.remaining().values()):
+            raise RuntimeError("write_replace_authority_not_fully_consumed")
+
     def export_validation_bundle(self, output_dir: Path) -> Path:
         validation_files = [
             self.root / "scientific_validation_report.json",
@@ -135,10 +153,7 @@ class ReferenceRuntimeFreezeProtocol:
 
         output = output_dir / "validation_bundle.json"
 
-        output.write_text(
-            json.dumps(bundle, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        self._governed_export_json(output, bundle, "macro04_freeze_validation_bundle")
 
         return output
 
@@ -159,10 +174,7 @@ class ReferenceRuntimeFreezeProtocol:
 
         output = output_dir / "longitudinal_metrics.json"
 
-        output.write_text(
-            json.dumps(metrics, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        self._governed_export_json(output, metrics, "macro04_freeze_longitudinal_metrics")
 
         return output
 

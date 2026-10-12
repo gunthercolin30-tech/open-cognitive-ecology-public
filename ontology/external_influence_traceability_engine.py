@@ -38,6 +38,7 @@ BEHAVIORAL_SOURCES = {
 }
 
 INTEGRATION_SOURCES = ['knowledge_integration_history.jsonl', 'integrated_responses_archive.jsonl', 'collaboration_history_repository.jsonl']
+ADOPTION_SOURCES = ['external_influence_adoption_ledger.jsonl']
 
 STOPWORDS = {
     'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'while',
@@ -274,6 +275,81 @@ class ExternalInfluenceTraceabilityEngine:
             out.append(ev)
         return out
 
+    def _normalize_adoption(self, raw: Dict[str, Any], source_file: str = 'synthetic') -> Dict[str, Any]:
+        rec = dict(raw)
+        adoption_class = str(rec.get('adoption_class') or rec.get('influence_class') or 'unknown')
+        status = str(rec.get('adoption_status') or rec.get('status') or '').lower()
+        human_status = str(rec.get('human_approval_status') or '').lower()
+        linked_commit = rec.get('linked_commit') or rec.get('commit') or rec.get('linked_commit_hash')
+        confirmed = bool(rec.get('confirmed_influence')) or (
+            adoption_class in {
+                'priority_candidate',
+                'action_candidate',
+                'revision_candidate',
+                'code_candidate',
+                'governance_candidate',
+            }
+            and human_status == 'approved'
+            and (bool(linked_commit) or 'approved' in status or 'adopt' in status)
+        )
+        rec['adoption_class'] = adoption_class
+        rec['confirmed_influence'] = confirmed
+        rec['linked_commit'] = linked_commit
+        rec['_source_file'] = rec.get('_source_file') or source_file
+        rec['adoption_timestamp'] = (
+            self._time_from_record(rec) or datetime.now(timezone.utc)
+        ).isoformat().replace('+00:00', 'Z')
+        rec['adoption_id'] = str(
+            rec.get('adoption_id')
+            or 'ADOPT-' + _hash(f"{rec.get('query_id')}|{rec.get('provider')}|{adoption_class}|{rec.get('response_hash')}")
+        )
+        return rec
+
+    def _synthetic_adoptions(self, inputs: Dict[str, Any]) -> List[Dict[str, Any]]:
+        records = inputs.get('adoption_records') or inputs.get('adoptions') or []
+        return [
+            self._normalize_adoption(raw if isinstance(raw, dict) else {'value': raw})
+            for raw in records
+        ]
+
+    def _load_adoptions(self, since: datetime) -> List[Dict[str, Any]]:
+        records: List[Dict[str, Any]] = []
+        for relative in ADOPTION_SOURCES:
+            path = self.root / relative
+            for raw in self._read_jsonl(path):
+                if not self._within_window(raw, since):
+                    continue
+                records.append(self._normalize_adoption(raw, relative))
+        return records
+
+    def _confirmed_counts(self, adoptions: List[Dict[str, Any]]) -> Dict[str, int]:
+        counts = {
+            'confirmed_external_influence_count': 0,
+            'confirmed_priority_influence_count': 0,
+            'confirmed_action_influence_count': 0,
+            'confirmed_revision_influence_count': 0,
+            'confirmed_code_influence_count': 0,
+            'confirmed_governance_influence_count': 0,
+            'linked_commit_influence_count': 0,
+        }
+        key_map = {
+            'priority_candidate': 'confirmed_priority_influence_count',
+            'action_candidate': 'confirmed_action_influence_count',
+            'revision_candidate': 'confirmed_revision_influence_count',
+            'code_candidate': 'confirmed_code_influence_count',
+            'governance_candidate': 'confirmed_governance_influence_count',
+        }
+        for adoption in adoptions:
+            if not adoption.get('confirmed_influence'):
+                continue
+            counts['confirmed_external_influence_count'] += 1
+            key = key_map.get(str(adoption.get('adoption_class')))
+            if key:
+                counts[key] += 1
+            if adoption.get('linked_commit'):
+                counts['linked_commit_influence_count'] += 1
+        return counts
+
     def _match_strength(self, integration: Dict[str, Any], event: Dict[str, Any]) -> Tuple[float, List[str]]:
         event_text = _norm(event.get('event_text') or event)
         event_lower = event_text.lower()
@@ -331,7 +407,9 @@ class ExternalInfluenceTraceabilityEngine:
         since = now - timedelta(hours=max(1, int(window_hours)))
         integrations = self._synthetic_integrations(inputs) if inputs.get('integrated_records') or inputs.get('integrations') else self._load_integrations(since)
         events = self._synthetic_events(inputs) if inputs.get('behavioral_events') or inputs.get('events') else self._load_behavioral_events(since)
+        adoptions = self._synthetic_adoptions(inputs) if inputs.get('adoption_records') or inputs.get('adoptions') else self._load_adoptions(since)
         traces = [t for t in self._build_traces(integrations, events) if float(t.get('influence_strength', 0.0)) >= min_strength]
+        confirmed_counts = self._confirmed_counts(adoptions)
 
         by_kind: Dict[str, int] = {}
         for trace in traces:
@@ -366,8 +444,13 @@ class ExternalInfluenceTraceabilityEngine:
             'external_action_influence_count': by_kind.get('action', 0),
             'external_runtime_influence_count': by_kind.get('runtime', 0),
             'external_revision_influence_count': by_kind.get('revision', 0),
+            'external_adoption_record_count': len(adoptions),
+            **confirmed_counts,
             'influence_counts_by_kind': by_kind,
             'latest_traces': traces[-50:],
+            'latest_confirmed_external_influences': [
+                adoption for adoption in adoptions if adoption.get('confirmed_influence')
+            ][-50:],
             'metrics': {
                 'external_integrated_knowledge_count': integration_count,
                 'behavioral_event_count': event_count,
@@ -382,17 +465,22 @@ class ExternalInfluenceTraceabilityEngine:
                 'external_action_influence_count': by_kind.get('action', 0),
                 'external_runtime_influence_count': by_kind.get('runtime', 0),
                 'external_revision_influence_count': by_kind.get('revision', 0),
+                'external_adoption_record_count': len(adoptions),
+                **confirmed_counts,
             },
             'diagnostics': {
-                'schema_version': 'EITE.v1',
-                'causal_scope': 'correlational_traceability_not_direct_causation',
+                'schema_version': 'EITE.v2',
+                'causal_scope': 'correlational_traceability_plus_confirmed_governed_adoption_records',
                 'history_path': str(self.history_path),
                 'latest_report_path': str(self.latest_report_path),
                 'behavioral_sources': BEHAVIORAL_SOURCES,
                 'integration_sources': INTEGRATION_SOURCES,
+                'adoption_sources': ADOPTION_SOURCES,
                 'minimum_strength': min_strength,
                 'non_closure_compliant': True,
                 'observational_only': True,
+                'confirmed_adoption_audit_enabled': True,
+                'direct_execution_authorized': False,
                 'no_code_modification_authorized': True,
             },
         }

@@ -1,0 +1,5 @@
+from ontology.occ1h_a095_rrpa_baseline_dependency_contract import baseline
+def test_identity(): r=baseline(); assert r["scenario_id"]=="A095" and r["label"]=="provider→theory→policy laundering" and r["family_id"]=="H10" and r["structural_group"]=="G6_CROSS_LAYER_PROVENANCE"
+def test_gap(): r=baseline(); assert r["root"] and r["independent_group"] and r["dependency_blockers"]==[] and r["qualification"]=="END_TO_END_PROVENANCE_PATH_NOT_MATERIALIZED" and not r["end_to_end_provider_theory_policy_provenance_path_materialized"]
+def test_rrpa(): r=baseline(); assert [r[f"rrp{i}"] for i in range(5)]==["BASELINE_FROZEN","DEPENDENCY_CLOSURE_ESTABLISHED","GAP_CAUSALLY_QUALIFIED","BASELINE_REPRODUCED","RESOLUTION_CONTRACT_FROZEN"] and r["fresh_interpreter_count"]==2
+def test_nonregression(): r=baseline(); assert r["historical_verdict"]=="INCONCLUSIVE" and r["current_verdict"]=="INCONCLUSIVE" and r["applicability"]=="APPLICABILITY_UNDETERMINED" and not r["production_runtime_modified"] and not r["criticality_changed"] and not r["occ1h_closed"] and not r["p159_final_lock"] and not r["p160_opened"]

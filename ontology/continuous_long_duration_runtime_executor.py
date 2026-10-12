@@ -28,6 +28,7 @@ class ContinuousLongDurationRuntimeExecutor:
         duration_hours: float = 24.0,
         interval_seconds: float = 3600.0,
         max_cycles: int = 10,
+        metrics_effect_context: Any = None,
     ) -> dict[str, Any]:
         plan = LongDurationExperimentLauncher(self.root).launch(
             duration_hours=duration_hours,
@@ -121,6 +122,7 @@ class ContinuousLongDurationRuntimeExecutor:
                     validation_status="observed",
                     governance_status="governed",
                     runtime_status="operational",
+                    effect_context=metrics_effect_context,
                 )
             except Exception:
                 pass

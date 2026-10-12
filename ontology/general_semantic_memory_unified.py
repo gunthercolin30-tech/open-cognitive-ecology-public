@@ -356,7 +356,7 @@ class GeneralSemanticMemoryUnified:
         )
         return result
 
-    def save_knowledge(self, file_path=None):
+    def save_knowledge(self, file_path=None, filesystem_effect_context=None):
         import json
         from pathlib import Path
 
@@ -364,7 +364,6 @@ class GeneralSemanticMemoryUnified:
             file_path = ROOT / "data" / "semantic_memory.json"
 
         file_path = Path(file_path)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
 
         quota_status = self._storage_quota_status(file_path)
         if quota_status["quota_exceeded"]:
@@ -375,8 +374,28 @@ class GeneralSemanticMemoryUnified:
                 "quota_status": quota_status,
             }
 
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(self.triples, f, ensure_ascii=False, indent=2)
+        if filesystem_effect_context is None:
+            raise RuntimeError("governed_filesystem_effect_context_required")
+
+        payload = json.dumps(
+            self.triples,
+            ensure_ascii=False,
+            indent=2,
+        ).encode("utf-8")
+
+        filesystem_effect_context.begin()
+        if not file_path.parent.exists():
+            filesystem_effect_context.execute_path(
+                "knowledge_parent_create",
+                "FS_CREATE_DIR",
+                file_path.parent,
+            )
+        filesystem_effect_context.execute_path(
+            "knowledge_write_replace",
+            "FS_WRITE_REPLACE_BYTES",
+            file_path,
+            payload,
+        )
 
         return {
             "saved": True,
@@ -423,7 +442,10 @@ class GeneralSemanticMemoryUnified:
         file_path = inputs.get("file_path")
 
         if action == "save":
-            result = self.save_knowledge(file_path)
+            result = self.save_knowledge(
+                file_path,
+                filesystem_effect_context=inputs.get("filesystem_effect_context"),
+            )
         elif action == "load":
             result = self.load_knowledge(file_path)
         else:

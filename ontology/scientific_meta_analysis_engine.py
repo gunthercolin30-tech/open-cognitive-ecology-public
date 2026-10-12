@@ -10,7 +10,7 @@ from pathlib import Path
 class ScientificMetaAnalysisEngine:
     primitive = "SCIENTIFIC_META_ANALYSIS_ENGINE"
 
-    def __init__(self, archive_dir=None):
+    def __init__(self, archive_dir=None, fs_context=None):
         if archive_dir is None:
             archive_dir = (
                 Path.home()
@@ -19,7 +19,19 @@ class ScientificMetaAnalysisEngine:
                 / "scientific_meta_analysis"
             )
         self.archive_dir = Path(archive_dir)
-        self.archive_dir.mkdir(parents=True, exist_ok=True)
+        if self.archive_dir.exists():
+            if not self.archive_dir.is_dir():
+                raise RuntimeError("scientific archive path is not a directory")
+        else:
+            if fs_context is None:
+                raise RuntimeError("governed filesystem context required to create scientific archive directory")
+            fs_context.execute_path(
+                "archive_create_dirs",
+                "FS_CREATE_DIRS",
+                self.archive_dir,
+            )
+            if not self.archive_dir.is_dir():
+                raise RuntimeError("governed scientific archive directory creation not confirmed")
 
     def _normalize(self, studies):
         normalized = []
@@ -140,4 +152,4 @@ if __name__ == "__main__":
         {"effect_size": 0.39, "variance": 0.05},
     ]
 
-    pprint(ScientificMetaAnalysisEngine().step(studies))
+    pprint(ScientificMetaAnalysisEngine(archive_dir=Path.cwd()).step(studies))

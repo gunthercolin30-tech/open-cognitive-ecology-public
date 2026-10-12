@@ -15,6 +15,7 @@ heartbeat emission, availability measurement, and readiness for synchronization.
 
 
 from __future__ import annotations
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -145,10 +146,13 @@ class DistributedCivilizationalNode:
                 return default
         return default
 
-    def _write_json(self, path: Path, payload: Dict[str, Any]) -> bool:
+    def _write_json(self, path: Path, payload: Dict[str, Any], fs_context: GovernedFilesystemEffectContext | None = None) -> bool:
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            if fs_context is None:
+                raise PermissionError("persisted JSON write requires preissued filesystem effect context")
+            data = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+            fs_context.execute_path("json_parent_create", "FS_CREATE_DIR", path.parent)
+            fs_context.execute_path("json_write", "FS_WRITE_BYTES", path, data)
             return True
         except Exception:
             return False
@@ -162,7 +166,7 @@ class DistributedCivilizationalNode:
         except Exception:
             return False
 
-    def _update_registry(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def _update_registry(self, state: Dict[str, Any], fs_context: GovernedFilesystemEffectContext | None = None) -> Dict[str, Any]:
         registry = self._read_json(self.registry_path, {"primitive": PRIMITIVE, "nodes": {}})
         if not isinstance(registry, dict):
             registry = {"primitive": PRIMITIVE, "nodes": {}}
@@ -182,7 +186,7 @@ class DistributedCivilizationalNode:
         active_nodes = [n for n in nodes.values() if n.get("status") in {"active", "degraded"}]
         registry["active_node_count"] = len(active_nodes)
         registry["updated_at_utc"] = _now()
-        self._write_json(self.registry_path, registry)
+        self._write_json(self.registry_path, registry, fs_context)
         return registry
 
     def _previous_heartbeat_count(self) -> int:
@@ -194,7 +198,7 @@ class DistributedCivilizationalNode:
                 return 0
         return 0
 
-    def step(self, state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def step(self, state: Optional[Dict[str, Any]] = None, fs_context: GovernedFilesystemEffectContext | None = None) -> Dict[str, Any]:
         state = state or {}
 
         node_name = _safe_text(state.get("node_name"), socket.gethostname() or self.node_id)
@@ -247,8 +251,8 @@ class DistributedCivilizationalNode:
         )
 
         payload = asdict(node_state)
-        state_persisted = self._write_json(self.state_path, payload)
-        registry = self._update_registry(payload)
+        state_persisted = self._write_json(self.state_path, payload, fs_context)
+        registry = self._update_registry(payload, fs_context)
         history_written = self._append_history(payload)
 
         active_node_count = int(registry.get("active_node_count", payload["active_node_count"]))

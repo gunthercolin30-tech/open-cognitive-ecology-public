@@ -17,7 +17,8 @@ import importlib
 import json
 import math
 import platform
-import subprocess
+from types import SimpleNamespace
+from ontology.governed_bounded_python_process import validation_main
 import sys
 import time
 from datetime import datetime, timezone
@@ -194,10 +195,7 @@ class RaspberryPiDeploymentValidation:
         if not run_validation_probe:
             return {"executed": False, "score": 0.9, "success": None, "reason": "probe_disabled"}
         try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "validation.main"], cwd=str(self.root), text=True,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180,
-            )
+            proc = SimpleNamespace(**(lambda r: {"returncode":r.get("returncode"),"stdout":(r.get("stdout") or b"").decode("utf-8",errors="replace"),"stderr":(r.get("stderr") or b"").decode("utf-8",errors="replace")})(validation_main(cwd=self.root,timeout_seconds=180)))
             return {
                 "executed": True,
                 "score": 1.0 if proc.returncode == 0 else 0.35,

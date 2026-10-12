@@ -32,14 +32,18 @@ class ExternalAssistanceTrigger:
         history_file: Path | None = None,
         default_threshold: float = 0.45,
         governance_threshold: float = 0.80,
-    ) -> None:
+     filesystem_effect_context=None) -> None:
         self.root = Path(root) if root is not None else Path.home() / "open-cognitive-ecology"
         self.history_file = (
             Path(history_file)
             if history_file is not None
             else self.root / "external_assistance_trigger_history.jsonl"
         )
-        self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        if filesystem_effect_context is None:
+            raise PermissionError('filesystem parent creation requires preissued filesystem effect context')
+        if not self.history_file.parent.exists():
+            filesystem_effect_context.begin()
+            filesystem_effect_context.execute_path('init_parent_create', 'FS_CREATE_DIR', self.history_file.parent)
         self.default_threshold = self._bounded(default_threshold)
         self.governance_threshold = self._bounded(governance_threshold)
 

@@ -68,7 +68,34 @@ class CivilizationalStorageRouter:
         }
         return mapping.get(category, self.ssd_root / "OCE_ARCHIVE")
 
-    def route_path(self, relative_path: str | Path, category: Optional[str] = None, create_parent: bool = True) -> Path:
+    @staticmethod
+    def _missing_parent_chain(parent: Path):
+        """Return missing directories, shallowest first, without creating them."""
+        parent = Path(parent)
+        if parent.exists():
+            if not parent.is_dir():
+                raise FileExistsError(str(parent))
+            return []
+        missing = []
+        cursor = parent
+        while not cursor.exists():
+            missing.append(cursor)
+            next_cursor = cursor.parent
+            if next_cursor == cursor:
+                raise RuntimeError("storage_route_parent_chain_has_no_existing_ancestor")
+            cursor = next_cursor
+        if not cursor.is_dir():
+            raise NotADirectoryError(str(cursor))
+        missing.reverse()
+        return missing
+
+    def route_path(
+        self,
+        relative_path: str | Path,
+        category: Optional[str] = None,
+        create_parent: bool = True,
+        filesystem_context=None,
+    ) -> Path:
         rel = Path(relative_path)
         if rel.is_absolute():
             try:
@@ -81,23 +108,105 @@ class CivilizationalStorageRouter:
             dest = (base / rel.name) if category_key == "metrics/prometheus" else (base / "routed" / rel)
         else:
             dest = self.fallback_root / category_key.replace("/", "_") / rel
+
         if create_parent:
-            dest.parent.mkdir(parents=True, exist_ok=True)
+            missing = self._missing_parent_chain(dest.parent)
+            if missing:
+                if filesystem_context is None:
+                    raise PermissionError("filesystem_effect_context_required_for_storage_route_parent_creation")
+                # A context is a single-use transaction boundary: begin first so
+                # replay is rejected explicitly. Cardinality is still checked
+                # before the first filesystem dispatch.
+                filesystem_context.begin()
+                remaining = filesystem_context.remaining()
+                available = remaining.get("storage_route_parent_create")
+                if available != len(missing):
+                    raise RuntimeError(
+                        "storage_route_parent_create_cardinality_mismatch:"
+                        + str(available) + "!=" + str(len(missing))
+                    )
+                for directory in missing:
+                    filesystem_context.execute_path(
+                        "storage_route_parent_create",
+                        "FS_CREATE_DIR",
+                        directory,
+                    )
         return dest
 
-    def route_directory(self, relative_path: str | Path, category: Optional[str] = None) -> Path:
-        return self.route_path(Path(relative_path) / ".router_directory_anchor", category=category, create_parent=True).parent
+    def route_directory(
+        self,
+        relative_path: str | Path,
+        category: Optional[str] = None,
+        filesystem_context=None,
+    ) -> Path:
+        return self.route_path(
+            Path(relative_path) / ".router_directory_anchor",
+            category=category,
+            create_parent=True,
+            filesystem_context=filesystem_context,
+        ).parent
 
-    def write_text(self, relative_path: str | Path, text: str, category: Optional[str] = None, encoding: str = "utf-8") -> Path:
-        path = self.route_path(relative_path, category=category)
-        path.write_text(text, encoding=encoding)
+    def write_text(
+        self,
+        relative_path: str | Path,
+        text: str,
+        category: Optional[str] = None,
+        encoding: str = "utf-8",
+        filesystem_context=None,
+    ) -> Path:
+        # Encode before beginning the governed transaction so encoding failure
+        # cannot leave parent-directory side effects.
+        payload = text.encode(encoding)
+        path = self.route_path(
+            relative_path,
+            category=category,
+            create_parent=False,
+        )
+        missing = self._missing_parent_chain(path.parent)
+        if filesystem_context is None:
+            raise PermissionError("filesystem_effect_context_required_for_storage_write")
+        remaining = filesystem_context.remaining()
+        parent_available = remaining.get("storage_route_parent_create")
+        write_available = remaining.get("storage_route_write_replace")
+        if parent_available != len(missing):
+            raise RuntimeError(
+                "storage_route_parent_create_cardinality_mismatch:"
+                + str(parent_available) + "!=" + str(len(missing))
+            )
+        if write_available != 1:
+            raise RuntimeError(
+                "storage_route_write_replace_cardinality_mismatch:"
+                + str(write_available) + "!=1"
+            )
+        filesystem_context.begin()
+        for directory in missing:
+            filesystem_context.execute_path(
+                "storage_route_parent_create",
+                "FS_CREATE_DIR",
+                directory,
+            )
+        filesystem_context.execute_path(
+            "storage_route_write_replace",
+            "FS_WRITE_REPLACE_BYTES",
+            path,
+            payload=payload,
+        )
         return path
 
-    def write_json(self, relative_path: str | Path, payload, category: Optional[str] = None) -> Path:
-        return self.write_text(relative_path, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), category=category)
+    def write_json(self, relative_path: str | Path, payload, category: Optional[str] = None, filesystem_context=None) -> Path:
+        return self.write_text(
+            relative_path,
+            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+            category=category,
+            filesystem_context=filesystem_context,
+        )
 
-    def append_jsonl(self, relative_path: str | Path, payload, category: Optional[str] = None) -> Path:
-        path = self.route_path(relative_path, category=category)
+    def append_jsonl(self, relative_path: str | Path, payload, category: Optional[str] = None, filesystem_context=None) -> Path:
+        path = self.route_path(
+            relative_path,
+            category=category,
+            filesystem_context=filesystem_context,
+        )
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
         return path

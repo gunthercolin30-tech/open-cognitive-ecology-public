@@ -1,0 +1,5 @@
+from ontology.occ1h_a095_rrpe_remediation_authority_gate import authority_gate
+def test_decomposition(): r=authority_gate(); assert r["rrp17"]=="BLOCKER_CAUSALLY_DECOMPOSED" and len(r["causal_decomposition"])==5
+def test_gap_and_minimality(): r=authority_gate(); assert r["rrp18"]=="TECHNICAL_ASSURANCE_CAPABILITY_GAP" and not r["normative_gap_detected"] and r["normative_degrees_of_freedom"]==0 and all(r["normative_minimality"].values())
+def test_authority_gate(): r=authority_gate(); assert r["rrp19"]=="BOUNDED_NON_PRODUCTION_CROSS_LAYER_PROVENANCE_SURROGATE_ASSURANCE_DESIGNED" and r["rrp20"]=="TECHNICAL_REMEDIATION_AUTHORIZED" and not r["new_normative_decision_required"] and r["rrp_f_required"]
+def test_nonregression(): r=authority_gate(); assert r["current_verdict"]=="INCONCLUSIVE" and r["root_materiality"]=="ROOT" and not r["production_runtime_modified"] and not r["production_cross_layer_path_materialized"] and not r["criticality_changed"] and not r["occ1h_closed"] and not r["p159_final_lock"] and not r["p160_opened"]

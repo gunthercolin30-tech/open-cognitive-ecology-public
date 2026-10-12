@@ -5,7 +5,6 @@ import argparse
 import hashlib
 import json
 import os
-import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,11 +84,12 @@ class AutonomousExternalCollaborationRunner:
         self.result_dir = self.base_dir / "results"
         self.result_dir.mkdir(parents=True, exist_ok=True)
 
-    def _append_jsonl(self, path: Path, obj: Dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n")
-
+    def _append_jsonl(self, path: Path, obj: Dict[str, Any], fs_context=None) -> None:
+        if fs_context is None:
+            raise PermissionError("JSONL append requires preissued filesystem effect context")
+        data = (json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        fs_context.execute_path("jsonl_parent_create", "FS_CREATE_DIR", path.parent)
+        fs_context.execute_path("jsonl_append", "FS_APPEND_BYTES", path, data)
     def _call_step(self, module_name: str, class_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         try:
             module = __import__(f"ontology.{module_name}", fromlist=[class_name])
@@ -161,7 +161,7 @@ class AutonomousExternalCollaborationRunner:
             "human oversight, traceability and reversibility. Do not introduce closure pressure."
         )
 
-    def _prepare_gateway_record(self, query_id: str, prompt: str, provider: str) -> Dict[str, Any]:
+    def _prepare_gateway_record(self, query_id: str, prompt: str, provider: str, fs_context=None) -> Dict[str, Any]:
         record = {
             "query_id": query_id,
             "provider": provider,
@@ -173,7 +173,7 @@ class AutonomousExternalCollaborationRunner:
             "browser_automation": False,
             "primitive": PRIMITIVE,
         }
-        self._append_jsonl(self.queue_path, record)
+        self._append_jsonl(self.queue_path, record, fs_context=fs_context)
         prompt_path = self.base_dir / f"{query_id}_prompt.txt"
         prompt_path.write_text(prompt, encoding="utf-8")
         record["prompt_path"] = str(prompt_path)
@@ -258,30 +258,22 @@ class AutonomousExternalCollaborationRunner:
             response_text = os.environ.get("OCE_EXTERNAL_COLLABORATION_RESPONSE", "")
             mode = "environment_response_adapter"
 
-        # Optional command adapter. It receives the prompt on stdin and must return text on stdout.
-        # It is disabled unless explicitly configured by the user environment.
-        command = payload.get("command") or os.environ.get("OCE_EXTERNAL_COLLABORATION_COMMAND")
-        if not response_text and command:
-            try:
-                completed = subprocess.run(
-                    command.split(),
-                    input=prompt,
-                    text=True,
-                    capture_output=True,
-                    timeout=int(payload.get("timeout_seconds", 30)),
-                    check=False,
-                )
-                response_text = completed.stdout.strip()
-                mode = "subprocess_adapter"
-            except Exception as exc:
-                return {
-                    "success": False,
-                    "provider": provider,
-                    "adapter_mode": "subprocess_adapter",
-                    "response_text": "",
-                    "failure_reason": f"{type(exc).__name__}: {exc}",
-                    "latency": round(time.time() - start, 6),
-                }
+        # P162-G6.5c10e1: legacy arbitrary PROCESS command space is closed.
+        # Payload/environment strings are not executable identities or execution rights.
+        legacy_payload_command = payload.get("command")
+        legacy_environment_command = os.environ.get("OCE_EXTERNAL_COLLABORATION_COMMAND")
+        if not response_text and (legacy_payload_command or legacy_environment_command):
+            return {
+                "success": False,
+                "provider": provider,
+                "adapter_mode": "legacy_process_adapter_blocked",
+                "response_text": "",
+                "response_length": 0,
+                "failure_reason": "arbitrary_external_collaboration_command_space_closed",
+                "latency": round(time.time() - start, 6),
+                "credentials_stored": False,
+                "browser_automation": False,
+            }
 
         if not response_text:
             # Default autonomous local adapter: not a claim of web/API access, but a complete
@@ -481,19 +473,20 @@ class AutonomousExternalCollaborationRunner:
         except Exception as exc:
             return {"success": False, "recovery_validated": False, "recovery_success_rate": 0.0, "error": f"{type(exc).__name__}: {exc}"}
 
-    def _record_metrics(self, metrics: Dict[str, Any]) -> None:
+    def _record_metrics(self, metrics: Dict[str, Any], metrics_effect_context=None) -> None:
         try:
             from ontology.metrics_history_recorder import MetricsHistoryRecorder
             MetricsHistoryRecorder().step({
                 "primitive": PRIMITIVE,
                 "metrics": metrics,
                 "timestamp_utc": _utc(),
-            })
+            }, effect_context=metrics_effect_context)
         except Exception:
             pass
 
-    def step(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def step(self, payload: Optional[Dict[str, Any]] = None, fs_context=None) -> Dict[str, Any]:
         payload = dict(payload or {})
+        metrics_effect_context = payload.pop("metrics_effect_context", None)
         provider = str(payload.get("provider") or os.environ.get("OCE_EXTERNAL_COLLABORATION_PROVIDER") or "autonomous_local_adapter")
         query_id = payload.get("query_id") or _hash(f"{provider}|{time.time()}", "AUTOEXT")
 
@@ -519,7 +512,7 @@ class AutonomousExternalCollaborationRunner:
         trigger = self._trigger_assistance(gap, payload)
         prompt_result = self._generate_prompt(gap, trigger, payload)
         prompt = str(prompt_result.get("external_prompt") or prompt_result.get("prompt") or self._fallback_prompt(payload))
-        gateway_record = self._prepare_gateway_record(query_id, prompt, provider)
+        gateway_record = self._prepare_gateway_record(query_id, prompt, provider, fs_context=fs_context)
         if provider_result is None:
             provider_result = self._execute_provider(prompt, query_id, provider, payload)
 
@@ -678,7 +671,7 @@ class AutonomousExternalCollaborationRunner:
         result_path = self.result_dir / f"{query_id}_result.json"
         result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         result["record_path"] = str(result_path)
-        self._append_jsonl(self.history_path, result)
+        self._append_jsonl(self.history_path, result, fs_context=fs_context)
         self._record_metrics({
             "autonomous_external_request_count": autonomous_external_request_count,
             "autonomous_external_execution_count": autonomous_external_execution_count,
@@ -689,7 +682,7 @@ class AutonomousExternalCollaborationRunner:
             "governance_preservation_score": governance_score,
             "continuity_score": continuity_score,
             "end_to_end_external_collaboration_score": end_to_end_score,
-        })
+        }, metrics_effect_context=metrics_effect_context)
         return result
 
 

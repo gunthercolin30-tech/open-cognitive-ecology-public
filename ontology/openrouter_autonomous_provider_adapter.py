@@ -1,11 +1,10 @@
 from __future__ import annotations
+from ontology.governed_network_effector import GovernedNetworkEffector, GovernedNetworkRequest, UrllibTrustedTransport
 
 import hashlib
 import json
 import os
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -51,7 +50,19 @@ def _safe_join(parts: list[str]) -> str:
     return "\n".join(cleaned).strip()
 
 
+P162_G63B4B_AUTH_NETWORK_MEDIATED = True
 class OpenRouterAutonomousProviderAdapter:
+    def set_governed_network_context(self, context):
+        self.governed_network_context = context
+
+    def _p162_governed_network(self):
+        context = getattr(self, 'governed_network_context', None)
+        if not isinstance(context, dict) or context.get('handle') is None or context.get('brokered_use') is None:
+            raise PermissionError('governed_brokered_network_context_required')
+        effector = context.get('effector') or GovernedNetworkEffector(
+            transport=UrllibTrustedTransport(), credential_resolver=context.get('credential_resolver'))
+        return context, effector
+
     """F9-R5-R2 OpenRouter provider adapter.
 
     It calls OpenRouter's OpenAI-compatible chat completions endpoint when
@@ -72,19 +83,21 @@ class OpenRouterAutonomousProviderAdapter:
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.history_path = self.root / "openrouter_autonomous_provider_history.jsonl"
 
-    def _append_jsonl(self, path: Path, obj: Dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n")
-
-    def _record_metrics(self, result: Dict[str, Any]) -> None:
+    def _append_jsonl(self, path: Path, obj: Dict[str, Any], fs_context=None) -> None:
+        if fs_context is None:
+            raise PermissionError("JSONL append requires preissued filesystem effect context")
+        data = (json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        if not path.parent.exists():
+            fs_context.execute_path("jsonl_parent_create", "FS_CREATE_DIR", path.parent)
+        fs_context.execute_path("jsonl_append", "FS_APPEND_BYTES", path, data)
+    def _record_metrics(self, result: Dict[str, Any], metrics_effect_context=None) -> None:
         try:
             from ontology.metrics_history_recorder import MetricsHistoryRecorder
             MetricsHistoryRecorder(root=self.root).step({
                 "primitive": PRIMITIVE,
                 "timestamp_utc": _utc(),
                 "metrics": result.get("metrics", {}),
-            })
+            }, effect_context=metrics_effect_context)
         except Exception:
             pass
 
@@ -160,9 +173,18 @@ class OpenRouterAutonomousProviderAdapter:
         safe_query_id = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in str(query_id))[:120]
         return self.raw_dir / f"{safe_query_id}_openrouter_raw_response.json"
 
-    def _persist_raw_response(self, query_id: str, data: Dict[str, Any]) -> str:
+    def _persist_raw_response(self, query_id: str, data: Dict[str, Any], fs_context=None) -> str:
         raw_path = self._raw_path_for(query_id)
-        raw_path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if fs_context is None:
+            raise PermissionError("preissued_raw_response_filesystem_effect_context_required")
+        fs_context.begin()
+        remaining = fs_context.remaining()
+        if remaining.get("macro04_openrouter_raw_response", 0) != 1 or sum(remaining.values()) != 1:
+            raise PermissionError("exactly_one_raw_response_write_authority_required")
+        payload = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+        fs_context.execute_path("macro04_openrouter_raw_response", "FS_WRITE_REPLACE_BYTES", raw_path, payload=payload)
+        if any(fs_context.remaining().values()):
+            raise RuntimeError("raw_response_write_authority_not_fully_consumed")
         return str(raw_path)
 
 
@@ -181,8 +203,9 @@ class OpenRouterAutonomousProviderAdapter:
             pass
         return "", "missing"
 
-    def step(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def step(self, payload: Optional[Dict[str, Any]] = None, fs_context=None) -> Dict[str, Any]:
         payload = dict(payload or {})
+        metrics_effect_context = payload.pop("metrics_effect_context", None)
         prompt = str(payload.get("prompt") or payload.get("external_prompt") or "").strip()
         query_id = str(payload.get("query_id") or _hash(prompt or _utc(), "OPENROUTER-Q"))
         provider = str(payload.get("provider") or "openrouter")
@@ -226,7 +249,7 @@ class OpenRouterAutonomousProviderAdapter:
                     "openrouter_response_length": 0,
                 },
             }
-            self._persist_result(query_id, result)
+            self._persist_result(query_id, result, fs_context=fs_context)
             return result
 
         if not api_key_present:
@@ -244,7 +267,7 @@ class OpenRouterAutonomousProviderAdapter:
                     "openrouter_response_length": 0,
                 },
             }
-            self._persist_result(query_id, result)
+            self._persist_result(query_id, result, fs_context=fs_context)
             return result
 
         request_body = {
@@ -267,24 +290,28 @@ class OpenRouterAutonomousProviderAdapter:
         }
 
         headers = {
-            "Authorization": "Bearer " + str(api_key_value),
             "Content-Type": "application/json",
             "HTTP-Referer": str(os.environ.get("OCE_OPENROUTER_HTTP_REFERER", "https://local.open-cognitive-ecology")),
             "X-Title": str(os.environ.get("OCE_OPENROUTER_TITLE", "Open Cognitive Ecology")),
         }
 
         try:
-            req = urllib.request.Request(
-                OPENROUTER_ENDPOINT,
-                data=json.dumps(request_body).encode("utf-8"),
-                headers=headers,
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=timeout_seconds) as response:
-                raw = response.read().decode("utf-8", errors="replace")
-                status_code = getattr(response, "status", 200)
+            context, effector = self._p162_governed_network()
+            result = effector.execute(
+                request=GovernedNetworkRequest(
+                    'POST', OPENROUTER_ENDPOINT, {'Content-Type':'application/json'}, json.dumps(request_body).encode("utf-8"),
+                    timeout_seconds=30.0, idempotent=False),
+                handle=context.get('handle'), brokered_use=context.get('brokered_use'),
+                adapter_id=context.get('adapter_id'), effector_id=context.get('effector_id'),
+                now_iso=context.get('now_iso'))
+            if result.get('status') != 'EFFECT_CONFIRMED':
+                raise RuntimeError('governed_openrouter_effect_not_confirmed:'+str(result.get('status')))
+            transport_result = result.get('transport_result') or {}
+            raw = transport_result.get('body', b'')
+            if isinstance(raw, bytes): raw = raw.decode('utf-8', errors='replace')
+            status_code = transport_result.get('status_code', 200)
             data = json.loads(raw)
-            raw_response_path = self._persist_raw_response(query_id, data)
+            raw_response_path = self._persist_raw_response(query_id, data, fs_context=payload.get("raw_response_effect_context"))
             response_text, extraction_source = self._extract_text_with_source(data)
             success = bool(response_text.strip()) and int(status_code) < 400
             result = {
@@ -346,16 +373,16 @@ class OpenRouterAutonomousProviderAdapter:
                 },
             }
 
-        self._persist_result(query_id, result)
+        self._persist_result(query_id, result, metrics_effect_context=metrics_effect_context, fs_context=fs_context)
         return result
 
-    def _persist_result(self, query_id: str, result: Dict[str, Any]) -> None:
+    def _persist_result(self, query_id: str, result: Dict[str, Any], metrics_effect_context=None, fs_context=None) -> None:
         safe_query_id = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in str(query_id))[:120]
         result_path = self.result_dir / f"{safe_query_id}_openrouter_result.json"
         result["record_path"] = str(result_path)
         result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        self._append_jsonl(self.history_path, result)
-        self._record_metrics(result)
+        self._append_jsonl(self.history_path, result, fs_context=fs_context)
+        self._record_metrics(result, metrics_effect_context=metrics_effect_context)
 
 
 if __name__ == "__main__":

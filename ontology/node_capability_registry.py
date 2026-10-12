@@ -20,6 +20,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, List
+
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
 import hashlib
 import importlib.util
 import json
@@ -221,10 +223,19 @@ class NodeCapabilityRegistry:
                 missing.append(dependency)
         return {'available': available, 'missing': missing}
 
-    def _write_json(self, path: Path, payload: Dict[str, Any]) -> bool:
+    def _write_json(self, path: Path, payload: Dict[str, Any], filesystem_effect_context: Optional[GovernedFilesystemEffectContext]) -> bool:
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
+            if not isinstance(filesystem_effect_context, GovernedFilesystemEffectContext):
+                raise RuntimeError('governed filesystem effect context required')
+            expected_slots = {'registry_parent_create': 1, 'registry_write': 1}
+            if filesystem_effect_context.remaining() != expected_slots:
+                raise RuntimeError('filesystem effect slot cardinality mismatch')
+            filesystem_effect_context.begin()
+            filesystem_effect_context.execute_path('registry_parent_create', 'FS_CREATE_DIRS', path.parent)
+            data = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode('utf-8')
+            filesystem_effect_context.execute_path('registry_write', 'FS_WRITE_REPLACE_BYTES', path, data)
+            if any(filesystem_effect_context.remaining().values()):
+                raise RuntimeError('unconsumed filesystem effect handles')
             return True
         except Exception:
             return False
@@ -255,7 +266,7 @@ class NodeCapabilityRegistry:
         # 8 cores or more is treated as full local CPU capability; bounded for comparability.
         return _bounded(cpu_count / 8.0 if cpu_count else 0.0)
 
-    def step(self, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def step(self, inputs: Optional[Dict[str, Any]] = None, filesystem_effect_context: Optional[GovernedFilesystemEffectContext] = None) -> Dict[str, Any]:
         inputs = inputs or {}
 
         cpu_count = _safe_int(inputs.get('cpu_count', os.cpu_count() or 0), 0)
@@ -352,7 +363,7 @@ class NodeCapabilityRegistry:
         payload['gpu_detection_confidence'] = gpu.get('confidence', 0.0)
         payload['registry_path'] = str(self.registry_path)
         payload['history_path'] = str(self.history_path)
-        payload['registry_written'] = self._write_json(self.registry_path, payload)
+        payload['registry_written'] = self._write_json(self.registry_path, payload, filesystem_effect_context)
         payload['history_written'] = self._append_history(payload)
         payload['diagnostics'] = {
             'primitive': PRIMITIVE,

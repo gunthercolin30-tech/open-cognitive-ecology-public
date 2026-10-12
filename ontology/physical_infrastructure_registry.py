@@ -6,7 +6,6 @@ import os
 import platform
 import shutil
 import socket
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
@@ -86,19 +85,6 @@ class PhysicalInfrastructureRegistry:
                 out.append({"id": str(item), "kind": "unspecified"})
         return out
 
-    @staticmethod
-    def _run_text(command: list[str], timeout: float = 2.0) -> str:
-        try:
-            completed = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-            return (completed.stdout or completed.stderr or "").strip()
-        except Exception:
-            return ""
 
     def _detect_host(self) -> Dict[str, Any]:
         machine = platform.machine().lower()

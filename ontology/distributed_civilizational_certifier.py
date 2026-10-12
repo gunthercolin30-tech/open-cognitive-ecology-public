@@ -49,16 +49,22 @@ class DistributedCivilizationalCertifier:
         vals = [float(v) for v in values if isinstance(v, (int, float))]
         return round(statistics.fmean(vals), 6) if vals else 0.0
 
-    def _safe_step(self, module_name: str, class_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _safe_step(self, module_name: str, class_name: str, payload: dict[str, Any], *, filesystem_context: Any = None) -> dict[str, Any]:
         try:
             module = __import__('ontology.' + module_name, fromlist=[class_name])
             cls = getattr(module, class_name)
             obj = cls()
             if hasattr(obj, 'step'):
-                try:
-                    result = obj.step(payload)
-                except TypeError:
-                    result = obj.step()
+                governed_child = module_name in {'live_state_synchronizer', 'distributed_attention_state_exchange', 'distributed_identity_persistence_validator'}
+                if governed_child:
+                    if filesystem_context is None:
+                        raise RuntimeError('governed_filesystem_context_required')
+                    result = obj.step(payload, filesystem_context=filesystem_context)
+                else:
+                    try:
+                        result = obj.step(payload)
+                    except TypeError:
+                        result = obj.step()
                 if isinstance(result, dict):
                     return result
         except Exception as exc:
@@ -105,7 +111,7 @@ class DistributedCivilizationalCertifier:
             'non_closure_score': self._clip(overrides.get('non_closure_score', 0.97)),
         }
 
-    def step(self, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
+    def step(self, inputs: dict[str, Any] | None = None, *, filesystem_context: Any = None) -> dict[str, Any]:
         inputs = dict(inputs or {})
         timestamp = datetime.now(timezone.utc).isoformat()
         run_live = bool(inputs.get('run_live_checks', False))
@@ -116,17 +122,17 @@ class DistributedCivilizationalCertifier:
         payload.setdefault('population_size', 1000)
         payload.setdefault('available_attention_budget', 1.0)
 
-        sync = self._safe_step('live_state_synchronizer', 'LiveStateSynchronizer', payload) if run_live else {
+        sync = self._safe_step('live_state_synchronizer', 'LiveStateSynchronizer', payload, filesystem_context=filesystem_context) if run_live else {
             'synchronization_success': True,
             'state_consistency_index': self._score_from_history('distributed_state/live_state_synchronization_history.jsonl', ['state_consistency_index', 'continuity_preservation_index'], 0.95, 'synchronization_success'),
             'distributed_divergence_rate': 0.0,
         }
-        attention = self._safe_step('distributed_attention_state_exchange', 'DistributedAttentionStateExchange', payload) if run_attention else {
+        attention = self._safe_step('distributed_attention_state_exchange', 'DistributedAttentionStateExchange', payload, filesystem_context=filesystem_context) if run_attention else {
             'distributed_attention_exchange_success': True,
             'cross_node_attention_consistency': self._score_from_history('distributed_attention_state/distributed_attention_state_exchange_history.jsonl', ['cross_node_attention_consistency'], 0.95, 'distributed_attention_exchange_success'),
             'distributed_attention_divergence_rate': 0.0,
         }
-        identity = self._safe_step('distributed_identity_persistence_validator', 'DistributedIdentityPersistenceValidator', payload) if run_identity else {
+        identity = self._safe_step('distributed_identity_persistence_validator', 'DistributedIdentityPersistenceValidator', payload, filesystem_context=filesystem_context) if run_identity else {
             'distributed_identity_validation_success': True,
             'distributed_identity_readiness': self._score_from_history('distributed_identity_state/distributed_identity_persistence_history.jsonl', ['distributed_identity_readiness', 'identity_continuity_index', 'identity_recovery_rate', 'lineage_identity_stability'], 0.95, 'distributed_identity_validation_success'),
         }

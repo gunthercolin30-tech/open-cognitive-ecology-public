@@ -57,7 +57,6 @@ class DistributedIdentityPersistenceValidator:
     def __init__(self, root: Path | None = None) -> None:
         self.root = Path(root) if root is not None else ROOT
         self.state_dir = self.root / "distributed_identity_state"
-        self.state_dir.mkdir(parents=True, exist_ok=True)
         self.history_path = (
             self.state_dir / "distributed_identity_persistence_history.jsonl"
         )
@@ -186,6 +185,8 @@ class DistributedIdentityPersistenceValidator:
         inputs: Mapping[str, Any],
         local_packet: Mapping[str, Any],
         remote_packet: Mapping[str, Any],
+        *,
+        filesystem_context: Any,
     ) -> dict[str, Any]:
         sync_result: dict[str, Any] = {
             "attempted": False,
@@ -203,7 +204,7 @@ class DistributedIdentityPersistenceValidator:
             payload = dict(inputs)
             payload["local_state"] = dict(local_packet)
             payload["remote_state"] = dict(remote_packet)
-            result = LiveStateSynchronizer(root=self.root).step(payload)
+            result = LiveStateSynchronizer(root=self.root).step(payload, filesystem_context=filesystem_context)
             sync_result.update(
                 {
                     "attempted": True,
@@ -230,6 +231,8 @@ class DistributedIdentityPersistenceValidator:
     def _try_attention_synchronization(
         self,
         inputs: Mapping[str, Any],
+        *,
+        filesystem_context: Any,
     ) -> dict[str, Any]:
         result: dict[str, Any] = {
             "attempted": False,
@@ -261,7 +264,7 @@ class DistributedIdentityPersistenceValidator:
             ]:
                 if key in inputs:
                     payload[key] = inputs[key]
-            attention = DistributedAttentionStateExchange(root=self.root).step(payload)
+            attention = DistributedAttentionStateExchange(root=self.root).step(payload, filesystem_context=filesystem_context)
             result.update(
                 {
                     "attempted": True,
@@ -289,18 +292,23 @@ class DistributedIdentityPersistenceValidator:
             )
         return result
 
-    def _write_json(self, path: Path, data: Mapping[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
+    def _write_json(self, path: Path, data: Mapping[str, Any], *, filesystem_context: Any, slot: str) -> None:
+        if filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required")
+        filesystem_context.execute_path(slot=slot + "_parent", operation_id="FS_CREATE_DIR", path=path.parent)
+        filesystem_context.execute_path(slot=slot, operation_id="FS_WRITE_REPLACE_BYTES", path=path, payload=json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False).encode("utf-8"))
 
-    def _append_history(self, record: Mapping[str, Any]) -> None:
-        self.history_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.history_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n")
+    def _append_history(self, record: Mapping[str, Any], *, filesystem_context: Any) -> None:
+        if filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required")
+        filesystem_context.execute_path(slot="history_parent", operation_id="FS_CREATE_DIR", path=self.history_path.parent)
+        filesystem_context.execute_path(slot="history_append", operation_id="FS_APPEND_BYTES", path=self.history_path, payload=(json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
 
-    def step(self, inputs: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    def step(self, inputs: Mapping[str, Any] | None = None, *, filesystem_context: Any = None) -> dict[str, Any]:
         started = time.perf_counter()
         inputs = dict(inputs or {})
+        if filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required")
 
         local_packet = self._load_or_default(
             inputs.get("local_identity_packet"),
@@ -334,8 +342,8 @@ class DistributedIdentityPersistenceValidator:
             ),
         }
 
-        live_sync = self._try_live_synchronization(inputs, local_packet, remote_packet)
-        attention_sync = self._try_attention_synchronization(inputs)
+        live_sync = self._try_live_synchronization(inputs, local_packet, remote_packet, filesystem_context=filesystem_context)
+        attention_sync = self._try_attention_synchronization(inputs, filesystem_context=filesystem_context)
 
         # If real transport/checks are requested and pass, they reinforce the
         # measured scores. If not requested, the validator remains a local
@@ -407,9 +415,9 @@ class DistributedIdentityPersistenceValidator:
             }
         )
 
-        self._write_json(self.local_identity_path, local_packet)
-        self._write_json(self.remote_identity_path, remote_packet)
-        self._write_json(self.merged_identity_path, merged_packet)
+        self._write_json(self.local_identity_path, local_packet, filesystem_context=filesystem_context, slot="local_identity_write")
+        self._write_json(self.remote_identity_path, remote_packet, filesystem_context=filesystem_context, slot="remote_identity_write")
+        self._write_json(self.merged_identity_path, merged_packet, filesystem_context=filesystem_context, slot="merged_identity_write")
 
         latency_ms = round((time.perf_counter() - started) * 1000.0, 3)
         record: dict[str, Any] = {
@@ -453,5 +461,5 @@ class DistributedIdentityPersistenceValidator:
                 "identity_architecture_validated": True,
             },
         }
-        self._append_history(record)
+        self._append_history(record, filesystem_context=filesystem_context)
         return record

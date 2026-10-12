@@ -17,6 +17,9 @@ asserted.
 
 
 from __future__ import annotations
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
+from ontology.governed_evidence_effect_policy import EvidenceEffectDecision
+from ontology.governed_evidence_filesystem_bridge import GovernedEvidenceFilesystemBridge
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -119,24 +122,111 @@ def _read_json(path: Path) -> Dict[str, Any]:
     return {}
 
 
-def _write_json(path: Path, payload: Dict[str, Any]) -> bool:
+def _write_json(path: Path, payload: Dict[str, Any], fs_context: GovernedFilesystemEffectContext | None = None) -> bool:
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
+        if fs_context is None:
+            raise PermissionError("persisted JSON write requires preissued filesystem effect context")
+        data = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+        fs_context.execute_path("json_parent_create", "FS_CREATE_DIR", path.parent)
+        fs_context.execute_path("json_write", "FS_WRITE_BYTES", path, data)
         return True
     except Exception:
         return False
 
 
-def _append_jsonl(path: Path, payload: Dict[str, Any], max_lines: int = 5000) -> bool:
+def _missing_parent_chain(parent: Path) -> List[Path]:
+    missing: List[Path] = []
+    cursor = parent
+    while not cursor.exists():
+        missing.append(cursor)
+        if cursor.parent == cursor:
+            break
+        cursor = cursor.parent
+    missing.reverse()
+    return missing
+
+
+def _append_jsonl(
+    path: Path,
+    payload: Dict[str, Any],
+    max_lines: int = 5000,
+    evidence_bridge: Optional[GovernedEvidenceFilesystemBridge] = None,
+    evidence_decisions: Optional[Mapping[str, Any]] = None,
+) -> bool:
+    """Append coordination history through preissued evidence-effect authority.
+
+    Rotation preserves the historical best-effort semantics: a denied or failed
+    trim never falls back to ambient authority and does not undo a confirmed append.
+    """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open('a', encoding='utf-8') as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + '\n')
+        if evidence_bridge is None or evidence_decisions is None:
+            return False
+        parent_decisions = evidence_decisions.get("parent_create", [])
+        append_decision = evidence_decisions.get("append")
+        trim_decision = evidence_decisions.get("trim")
+        if not isinstance(parent_decisions, list):
+            return False
+        if not isinstance(append_decision, EvidenceEffectDecision):
+            return False
+
+        missing_parents = _missing_parent_chain(path.parent)
+        if len(parent_decisions) != len(missing_parents):
+            return False
+        if any(not isinstance(d, EvidenceEffectDecision) for d in parent_decisions):
+            return False
+
+        root_path = getattr(getattr(evidence_bridge, "filesystem_context", None), "root_path", None)
+        if root_path is None:
+            return False
+        root_path = Path(root_path).resolve()
+
+        for parent, decision in zip(missing_parents, parent_decisions):
+            try:
+                relative_parent = parent.resolve().relative_to(root_path)
+            except (OSError, ValueError):
+                return False
+            result = evidence_bridge.execute_path(
+                decision=decision,
+                evidence_role="inter_individual_coordination_history_parent",
+                slot="coordination_history_parent_create",
+                operation_id="FS_CREATE_DIR",
+                path=relative_parent,
+            )
+            if result.get("status") != "EVIDENCE_EFFECT_CONFIRMED":
+                return False
+
         try:
-            lines = path.read_text(encoding='utf-8').splitlines()
+            relative_path = path.resolve().relative_to(root_path)
+        except (OSError, ValueError):
+            return False
+        append_bytes = (json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        result = evidence_bridge.execute_path(
+            decision=append_decision,
+            evidence_role="inter_individual_coordination_history_append",
+            slot="coordination_history_append",
+            operation_id="FS_APPEND_BYTES",
+            path=relative_path,
+            payload=append_bytes,
+        )
+        if result.get("status") != "EVIDENCE_EFFECT_CONFIRMED":
+            return False
+
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
             if len(lines) > max_lines:
-                path.write_text('\n'.join(lines[-max_lines:]) + '\n', encoding='utf-8')
+                if not isinstance(trim_decision, EvidenceEffectDecision):
+                    return True
+                trimmed = ("\n".join(lines[-max_lines:]) + "\n").encode("utf-8")
+                trim_result = evidence_bridge.execute_path(
+                    decision=trim_decision,
+                    evidence_role="inter_individual_coordination_history_trim",
+                    slot="coordination_history_trim",
+                    operation_id="FS_WRITE_REPLACE_BYTES",
+                    path=relative_path,
+                    payload=trimmed,
+                )
+                if trim_result.get("status") != "EVIDENCE_EFFECT_CONFIRMED":
+                    return True
         except Exception:
             pass
         return True
@@ -322,7 +412,13 @@ class InterIndividualCoordinationProtocol:
             })
         return assignments
 
-    def step(self, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def step(
+        self,
+        inputs: Optional[Dict[str, Any]] = None,
+        fs_context: GovernedFilesystemEffectContext | None = None,
+        evidence_bridge: Optional[GovernedEvidenceFilesystemBridge] = None,
+        history_evidence_decisions: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
         inputs = dict(inputs or {})
         timestamp = _now()
         node_state = self._load_node_state()
@@ -411,6 +507,6 @@ class InterIndividualCoordinationProtocol:
             },
         }
 
-        payload['protocol_written'] = _write_json(self.protocol_path, payload)
-        payload['history_written'] = _append_jsonl(self.history_path, payload)
+        payload['protocol_written'] = _write_json(self.protocol_path, payload, fs_context)
+        payload['history_written'] = _append_jsonl(self.history_path, payload, evidence_bridge=evidence_bridge, evidence_decisions=history_evidence_decisions)
         return payload

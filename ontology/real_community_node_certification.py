@@ -4,9 +4,10 @@ import datetime as _dt
 import hashlib
 import json
 import os
-import socket
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+from ontology.governed_network_effector import GovernedTcpProbeEffector, TrustedTcpConnectProbeTransport
 
 
 ROOT = Path.home() / "open-cognitive-ecology"
@@ -28,13 +29,21 @@ def _now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
 
 
+P162_G63B6_TCP_PROBE_MEDIATED = True
+
 class RealCommunityNodeCertification:
     # F16.2 real community-node certification.
     primitive = "REAL_COMMUNITY_NODE_CERTIFICATION"
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Optional[Path] = None, filesystem_effect_context_provider=None) -> None:
         self.root = Path(root) if root else ROOT
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
         self.history_path = self._history_path()
+        self.governed_tcp_probe_context = None
+        self._last_reachability_diagnostic = "not_checked"
+
+    def set_governed_tcp_probe_context(self, context: Optional[Dict[str, Any]]) -> None:
+        self.governed_tcp_probe_context = context
 
     def _history_path(self) -> Path:
         ssd_root = Path(os.environ.get("OCE_SSD_ROOT", "/Volumes/OCE_SSD"))
@@ -48,7 +57,16 @@ class RealCommunityNodeCertification:
             path = ssd_continuity / "certifications" / "real_community_node_certification_history.jsonl"
         else:
             path = self.root / "real_community_node_certification_history.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
+        parent = path.parent
+        if not parent.exists():
+            provider = self.filesystem_effect_context_provider
+            if provider is None or not callable(provider):
+                raise RuntimeError("filesystem_effect_context_provider_required")
+            context = provider("FS_CREATE_DIRS", parent)
+            if context is None:
+                raise RuntimeError("preissued_filesystem_effect_context_required")
+            context.begin()
+            context.execute_path("history_parent", "FS_CREATE_DIRS", parent)
         return path
 
     def _dependency_available(self, name: str) -> bool:
@@ -56,12 +74,18 @@ class RealCommunityNodeCertification:
 
     def _probe_reachability(self, host: str, port: int, timeout: float) -> bool:
         if not host:
+            self._last_reachability_diagnostic = "missing_host"
             return False
-        try:
-            with socket.create_connection((host, int(port)), timeout=float(timeout)):
-                return True
-        except Exception:
+        context = self.governed_tcp_probe_context
+        if not isinstance(context, dict) or context.get("handle") is None:
+            self._last_reachability_diagnostic = "governed_tcp_probe_context_required"
             return False
+        effector = context.get("effector") or GovernedTcpProbeEffector(transport=TrustedTcpConnectProbeTransport())
+        result = effector.execute(host=host, port=int(port), timeout_seconds=float(timeout),
+                                  handle=context.get("handle"), adapter_id=context.get("adapter_id"),
+                                  effector_id=context.get("effector_id"))
+        self._last_reachability_diagnostic = str(result.get("reason") or result.get("status"))
+        return bool(result.get("status") == "EFFECT_CONFIRMED" and result.get("reachable") is True)
 
     def step(self, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         inputs = dict(inputs or {})
@@ -203,6 +227,8 @@ class RealCommunityNodeCertification:
                 "simulated_unreachable": simulate_unreachable,
                 "port": port,
                 "timeout_seconds": timeout_seconds,
+                "reachability_probe_governance": self._last_reachability_diagnostic if require_reachability else "not_required",
+                "network_dimension_mediated": True,
                 "closure_pressure_added": 0.0,
             },
         }

@@ -1,11 +1,40 @@
 
 from __future__ import annotations
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
 
 import json
-import subprocess
+from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+def _p162g6_execute_evidence_write(bridge, decision, slot, path, payload, evidence_role):
+    # Exact evidence write; never an authority source.
+    if bridge is None or decision is None:
+        raise RuntimeError("governed_evidence_bridge_and_decision_required")
+    ctx = getattr(bridge, "filesystem_context", None)
+    root_path = getattr(ctx, "root_path", None)
+    if root_path is None:
+        raise RuntimeError("filesystem_context_root_path_required")
+    root = Path(root_path).expanduser().resolve()
+    target = Path(path).expanduser()
+    if not target.is_absolute():
+        target = root / target
+    try:
+        relative = target.resolve(strict=False).relative_to(root).as_posix()
+    except ValueError as exc:
+        raise RuntimeError("evidence_target_outside_governed_root") from exc
+    result = bridge.execute_path(
+        decision=decision,
+        evidence_role=evidence_role,
+        slot=slot,
+        operation_id="FS_WRITE_REPLACE_BYTES",
+        path=relative,
+        payload=payload,
+    )
+    if not isinstance(result, dict) or result.get("status") != "EVIDENCE_EFFECT_CONFIRMED":
+        raise RuntimeError("evidence_effect_not_confirmed")
+    return result
 
 
 class OpenSourceReplicationReadiness:
@@ -218,11 +247,14 @@ class OpenSourceReplicationReadiness:
         }
         return scores, details
 
-    def _write_json(self, path: Path, data: dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    def _write_json(self, path: Path, data: dict[str, Any], fs_context: GovernedFilesystemEffectContext | None = None) -> None:
+        if fs_context is None:
+            raise PermissionError("persisted JSON state requires preissued filesystem effect context")
+        payload = (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+        fs_context.execute_path("json_parent_create", "FS_CREATE_DIR", path.parent)
+        fs_context.execute_path("json_write", "FS_WRITE_BYTES", path, payload)
 
-    def _write_prometheus(self, path: Path, result: dict[str, Any]) -> None:
+    def _write_prometheus(self, path: Path, result: dict[str, Any], fs_context: GovernedFilesystemEffectContext | None = None) -> None:
         lines = [
             "# HELP oce_open_source_replication_readiness_score Open source replication readiness score.",
             "# TYPE oce_open_source_replication_readiness_score gauge",
@@ -238,9 +270,12 @@ class OpenSourceReplicationReadiness:
             metric = "oce_" + key
             lines.append(f"# TYPE {metric} gauge")
             lines.append(f"{metric} {value}")
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        if fs_context is None:
+            raise PermissionError("Prometheus write requires preissued filesystem effect context")
+        data = ("\n".join(lines) + "\n").encode("utf-8")
+        fs_context.execute_path("replication_prometheus_write", "FS_WRITE_REPLACE_BYTES", path, data)
 
-    def _write_dashboard(self, path: Path, result: dict[str, Any]) -> None:
+    def _write_dashboard(self, path: Path, result: dict[str, Any], evidence_bridge, evidence_decision) -> None:
         rows = "".join(
             f"<tr><td>{key}</td><td>{value}</td></tr>"
             for key, value in result["component_scores"].items()
@@ -257,9 +292,9 @@ class OpenSourceReplicationReadiness:
 <tr><td>replication_protocol_completeness</td><td>{result['replication_protocol_completeness']}</td></tr>
 {rows}
 </table></body></html>"""
-        path.write_text(html, encoding="utf-8")
+        _p162g6_execute_evidence_write(evidence_bridge, evidence_decision, "replication_dashboard_write", path, html.encode("utf-8"), "EVIDENCE_REPORT_EXPORT")
 
-    def _persist(self, result: dict[str, Any]) -> dict[str, Any]:
+    def _persist(self, result: dict[str, Any], evidence_bridge=None, evidence_decisions=None, fs_context: GovernedFilesystemEffectContext | None = None) -> dict[str, Any]:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         state_path = self.output_dir / "latest_open_source_replication_readiness.json"
         history_path = self.output_dir / "open_source_replication_readiness_history.jsonl"
@@ -272,17 +307,21 @@ class OpenSourceReplicationReadiness:
         serializable["prometheus_path"] = str(prom_path)
         serializable["dashboard_path"] = str(dashboard_path)
 
-        self._write_json(state_path, serializable)
+        self._write_json(state_path, serializable, fs_context)
         with history_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(serializable, ensure_ascii=False) + "\n")
-        self._write_prometheus(prom_path, serializable)
-        self._write_dashboard(dashboard_path, serializable)
+        self._write_prometheus(prom_path, serializable, fs_context)
+        decisions = evidence_decisions or {}
+        self._write_dashboard(dashboard_path, serializable, evidence_bridge, decisions.get("replication_dashboard_write"))
         return serializable
 
     def step(
         self,
         replication_context: dict[str, Any] | None = None,
         persist: bool = True,
+        evidence_bridge=None,
+        evidence_decisions=None,
+        fs_context: GovernedFilesystemEffectContext | None = None,
     ) -> dict[str, Any]:
         context = self._detect_context()
         override_used = False
@@ -359,5 +398,5 @@ class OpenSourceReplicationReadiness:
             "dashboard_path": None,
         }
         if persist:
-            result = self._persist(result)
+            result = self._persist(result, evidence_bridge=evidence_bridge, evidence_decisions=evidence_decisions, fs_context=fs_context)
         return result

@@ -96,7 +96,9 @@ class TerminalConversationRuntime:
         )
 
     def step(self, inputs: Optional[Dict[str, Any]] = None, emit_to_stdout: bool = True) -> Dict[str, Any]:
-        payload = self._normalise_inputs(inputs)
+        raw_inputs = dict(inputs or {})
+        metrics_effect_context = raw_inputs.pop("metrics_effect_context", None)
+        payload = self._normalise_inputs(raw_inputs)
         timestamp = self._now()
         agent = self._load_agent()
         agent_result = agent.step(payload)
@@ -171,6 +173,7 @@ class TerminalConversationRuntime:
                 validation_status="validated" if record.get("terminal_conversation_index", 0.0) >= 0.0 else "unknown",
                 governance_status="governed" if record.get("initiative_allowed", False) else "observed",
                 runtime_status="operational",
+                effect_context=metrics_effect_context,
             )
         except Exception:
             pass

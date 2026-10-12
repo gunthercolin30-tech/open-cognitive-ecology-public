@@ -273,6 +273,7 @@ class EnvironmentalGroundingLongitudinalObservatory:
         **overrides: Any,
     ) -> dict[str, Any]:
         inputs = dict(inputs or {})
+        metrics_effect_context = inputs.pop("metrics_effect_context", None)
         data: dict[str, Any] = {}
 
         if inputs:
@@ -332,6 +333,7 @@ class EnvironmentalGroundingLongitudinalObservatory:
                 validation_status=True,
                 governance_status="governed",
                 runtime_status="operational",
+                effect_context=metrics_effect_context,
             )
             result["metrics_recorded"] = True
         except Exception as exc:

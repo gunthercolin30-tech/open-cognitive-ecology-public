@@ -121,14 +121,14 @@ class ScientificPublicationRegistry:
         git_tags_text = self._safe_read(self.root / "git_tags.txt")
         if not git_tags_text:
             try:
-                import subprocess
+                from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
                 git_tags_text = subprocess.run(["git", "tag", "-l"], cwd=str(self.root), text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3).stdout
             except Exception:
                 git_tags_text = ""
         git_log_text = self._safe_read(self.root / "git_log_80.txt") or self._safe_read(self.root / "git_log_50.txt")
         if not git_log_text:
             try:
-                import subprocess
+                from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
                 git_log_text = subprocess.run(["git", "log", "--decorate", "--oneline", "-80"], cwd=str(self.root), text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3).stdout
             except Exception:
                 git_log_text = ""

@@ -34,14 +34,16 @@ class CivilizationalMemoryArchive:
         self,
         category: str = "general",
         payload: dict[str, Any] | None = None,
+        *,
+        filesystem_context: Any = None,
     ) -> dict[str, Any]:
         payload = payload or {"status": "operational"}
+        if filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required")
 
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.record_counter += 1
-
+        next_counter = self.record_counter + 1
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        record_id = f"CMA-{self.record_counter:04d}"
+        record_id = f"CMA-{next_counter:04d}"
 
         record = {
             "record_id": record_id,
@@ -51,10 +53,18 @@ class CivilizationalMemoryArchive:
         }
 
         path = self.output_dir / f"{record_id}_{timestamp}.json"
-        path.write_text(
-            json.dumps(record, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        filesystem_context.execute_path(
+            slot="civilizational_archive_parent",
+            operation_id="FS_CREATE_DIR",
+            path=self.output_dir,
         )
+        filesystem_context.execute_path(
+            slot="civilizational_archive_write",
+            operation_id="FS_WRITE_REPLACE_BYTES",
+            path=path,
+            payload=json.dumps(record, indent=2, ensure_ascii=False).encode("utf-8"),
+        )
+        self.record_counter = next_counter
 
         self.diagnostics = {
             "primitive": PRIMITIVE,
@@ -66,5 +76,5 @@ class CivilizationalMemoryArchive:
 
         return self.diagnostics
 
-    def step(self) -> dict[str, Any]:
-        return self.archive()
+    def step(self, *, filesystem_context: Any = None) -> dict[str, Any]:
+        return self.archive(filesystem_context=filesystem_context)

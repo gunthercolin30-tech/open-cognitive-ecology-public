@@ -12,11 +12,24 @@ import json
 class AutonomousPublicationPipeline:
     PRIMITIVE = "AUTONOMOUS_PUBLICATION_PIPELINE"
 
-    def __init__(self, archive_root=None):
+    def __init__(self, archive_root=None, filesystem_effect_context_provider=None):
         if archive_root is None:
             archive_root = Path.home() / "open-cognitive-ecology" / "publication_archive"
         self.archive_root = Path(archive_root)
-        self.archive_root.mkdir(parents=True, exist_ok=True)
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
+        self._ensure_governed_directory(self.archive_root, "p162g6_macro02_publication_archive_create")
+
+    def _ensure_governed_directory(self, directory: Path, slot: str) -> None:
+        if directory.exists():
+            return
+        provider = self.filesystem_effect_context_provider
+        if not callable(provider):
+            raise RuntimeError("filesystem_effect_context_provider_required")
+        context = provider("FS_CREATE_DIR", directory)
+        if context is None:
+            raise RuntimeError("preissued_filesystem_effect_context_required")
+        context.begin()
+        context.execute_path(slot, "FS_CREATE_DIR", directory)
 
     def step(self, *args, **kwargs):
         scientific_result = {}

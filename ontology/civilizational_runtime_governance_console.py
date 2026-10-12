@@ -1,7 +1,7 @@
 
 from pathlib import Path
 import json
-import subprocess
+from ontology.governed_local_system_probe import probe_text
 
 
 class CivilizationalRuntimeGovernanceConsole:
@@ -16,13 +16,8 @@ class CivilizationalRuntimeGovernanceConsole:
 
     def _service_loaded(self):
         try:
-            result = subprocess.run(
-                ["launchctl", "list"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            return self.service_label in result.stdout
+            result = probe_text("launchctl", "list", timeout_seconds=10)
+            return self.service_label in result
         except Exception:
             return False
 

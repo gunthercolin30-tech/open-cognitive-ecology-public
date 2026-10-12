@@ -29,6 +29,8 @@ import json
 import math
 from typing import Any, Iterable, Optional
 
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
+
 PRIMITIVE = "longitudinal_metrics_archive"
 
 DEPENDENCIES = [
@@ -148,15 +150,14 @@ class LongitudinalMetricsArchive:
         suffix = ".jsonl.gz" if self.compress else ".jsonl"
         return directory / f"{key}{suffix}"
 
-    def _write_jsonl(self, path: Path, records: list[dict[str, Any]]) -> int:
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def _write_jsonl(self, path: Path, records: list[dict[str, Any]], filesystem_effect_context: GovernedFilesystemEffectContext) -> int:
+        if not isinstance(filesystem_effect_context, GovernedFilesystemEffectContext):
+            raise RuntimeError("governed filesystem effect context required")
         lines = [json.dumps(record, ensure_ascii=False, sort_keys=True, default=_json_default) for record in records]
         payload = "\n".join(lines) + ("\n" if lines else "")
-        if self.compress:
-            with gzip.open(path, "wt", encoding="utf-8") as handle:
-                handle.write(payload)
-        else:
-            path.write_text(payload, encoding="utf-8")
+        filesystem_effect_context.execute_path("archive_parent_create", "FS_CREATE_DIRS", path.parent)
+        data = gzip.compress(payload.encode("utf-8"), mtime=0) if self.compress else payload.encode("utf-8")
+        filesystem_effect_context.execute_path("archive_write", "FS_WRITE_REPLACE_BYTES", path, data)
         return path.stat().st_size if path.exists() else 0
 
     def _archive_size(self) -> int:
@@ -256,15 +257,22 @@ class LongitudinalMetricsArchive:
         self.state_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         return manifest
 
-    def archive(self) -> dict[str, Any]:
+    def archive(self, filesystem_effect_context: GovernedFilesystemEffectContext) -> dict[str, Any]:
         records = self._load_records()
         buckets = self._bucket_records(records)
         written: dict[str, dict[str, str]] = {"daily": {}, "weekly": {}, "monthly": {}}
         written_files: list[str] = []
+        if not isinstance(filesystem_effect_context, GovernedFilesystemEffectContext):
+            raise RuntimeError("governed filesystem effect context required")
+        expected_calls = sum(len(grouped) for grouped in buckets.values())
+        expected_slots = {"archive_parent_create": expected_calls, "archive_write": expected_calls}
+        if filesystem_effect_context.remaining() != expected_slots:
+            raise RuntimeError("filesystem effect slot cardinality mismatch")
+        filesystem_effect_context.begin()
         for period, grouped in buckets.items():
             for key, period_records in grouped.items():
                 target = self._target_path(period, key)
-                self._write_jsonl(target, period_records)
+                self._write_jsonl(target, period_records, filesystem_effect_context)
                 written[period][key] = str(target)
                 written_files.append(str(target))
         experiment_summary_path = self._write_experiment_summary(records, written_files)
@@ -302,17 +310,19 @@ class LongitudinalMetricsArchive:
             "error_count": 0,
         }
 
-    def step(self, inputs: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    def step(self, inputs: Optional[dict[str, Any]] = None, filesystem_effect_context: Optional[GovernedFilesystemEffectContext] = None) -> dict[str, Any]:
         inputs = dict(inputs or {})
         if "archive_quota_bytes" in inputs:
             self.archive_quota_bytes = max(5 * 1024 * 1024, int(inputs["archive_quota_bytes"]))
         if "compress" in inputs:
             self.compress = bool(inputs["compress"])
-        return self.archive()
+        if not isinstance(filesystem_effect_context, GovernedFilesystemEffectContext):
+            raise RuntimeError("governed filesystem effect context required")
+        return self.archive(filesystem_effect_context)
 
 
 ENGINE = LongitudinalMetricsArchive()
 
 
-def step(inputs: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    return ENGINE.step(inputs)
+def step(inputs: Optional[dict[str, Any]] = None, filesystem_effect_context: Optional[GovernedFilesystemEffectContext] = None) -> dict[str, Any]:
+    return ENGINE.step(inputs, filesystem_effect_context)

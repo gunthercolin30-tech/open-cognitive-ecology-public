@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
@@ -14,10 +13,11 @@ except Exception:
 from ontology.causal_inference import CausalInference
 from ontology.monitoring import Monitoring
 from ontology.performance_improvement_planner import PerformanceImprovementPlanner
+from ontology.governed_database_effector import DatabaseEffectRequest
 
 
 class AdvancedCausalReasoningEngine:
-    def __init__(self):
+    def __init__(self, governed_database_context=None):
         if nx is None:
             raise RuntimeError("networkx n'est pas installé.")
 
@@ -30,22 +30,28 @@ class AdvancedCausalReasoningEngine:
         state_dir = root / "causal_reasoning"
         state_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = state_dir / "causal_history.sqlite"
+        self._governed_database_context = governed_database_context
+        self.database_persistence_status = "GOVERNED_CONTEXT_REQUIRED"
+        if governed_database_context is not None:
+            self._initialize_db()
 
-        self._initialize_db()
+    def _database_effect(self, operation, statement_id, parameters=()):
+        ctx = self._governed_database_context
+        if ctx is None:
+            self.database_persistence_status = "EXECUTION_BLOCKED_AT_FINAL_RECHECK"
+            return {"status": self.database_persistence_status, "reason": "governed_database_context_required"}
+        effector = ctx["effector"]
+        handle_factory = ctx["handle_factory"]
+        adapter_id = ctx["adapter_id"]
+        target = effector.canonical_target(self.db_path, "causal_history")
+        handle = handle_factory(target=target, operation=operation, adapter_id=adapter_id)
+        request = DatabaseEffectRequest(database_path=str(self.db_path), operation=operation, table="causal_history", statement_id=statement_id, parameters=tuple(parameters), mutation_class="WRITE")
+        result = effector.execute(request=request, handle=handle, adapter_id=adapter_id)
+        self.database_persistence_status = result["status"]
+        return result
 
     def _initialize_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS causal_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    cause TEXT NOT NULL,
-                    effect TEXT NOT NULL,
-                    confidence REAL NOT NULL,
-                    executed_utc TEXT NOT NULL
-                )
-                """
-            )
+        return self._database_effect("CREATE_TABLE", "causal_history.create")
 
     def _normalize(self, text: str) -> str:
         return " ".join((text or "").strip().lower().split())
@@ -59,20 +65,10 @@ class AdvancedCausalReasoningEngine:
 
         self.graph.add_edge(cause, effect, weight=float(weight))
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                INSERT INTO causal_history
-                (cause, effect, confidence, executed_utc)
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    cause,
-                    effect,
-                    float(weight),
-                    datetime.now(timezone.utc).isoformat(),
-                ),
-            )
+        self._database_effect(
+            "INSERT", "causal_history.insert",
+            (cause, effect, float(weight), datetime.now(timezone.utc).isoformat()),
+        )
 
     def ingest_text(self, text: str):
         patterns = [
@@ -190,3 +186,5 @@ class AdvancedCausalReasoningEngine:
                 planner_result["recommended_next_primitive"],
             "database_path": str(self.db_path),
         }
+
+P162_G64C1_DATABASE_MEDIATED = True

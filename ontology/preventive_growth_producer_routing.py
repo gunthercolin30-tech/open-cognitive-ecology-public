@@ -71,9 +71,33 @@ class PreventiveGrowthProducerRouting:
         "conversation_initiatives": ("OCE_EXPERIMENTS", "preventive_growth/conversation_initiatives"),
     }
 
-    def __init__(self, root: Optional[Path] = None, ssd_root: Optional[Path] = None) -> None:
+    def __init__(self, root: Optional[Path] = None, ssd_root: Optional[Path] = None, filesystem_effect_context_provider: Any = None) -> None:
         self.root = Path(root) if root is not None else ROOT
         self.ssd_root = Path(ssd_root) if ssd_root is not None else DEFAULT_SSD_ROOT
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
+
+    def _take_filesystem_effect_context(self, operation_id: str, target: Path, source: Optional[Path] = None):
+        provider = self.filesystem_effect_context_provider
+        if provider is None or not callable(provider):
+            raise RuntimeError("governed_filesystem_effect_context_provider_required")
+        context = provider(operation_id, target, source)
+        if context is None:
+            raise RuntimeError("preissued_filesystem_effect_context_required")
+        return context
+
+    def _governed_path(self, operation_id: str, slot: str, target: Path, payload: Optional[bytes] = None) -> None:
+        context = self._take_filesystem_effect_context(operation_id, target)
+        context.begin()
+        context.execute_path(slot, operation_id, target, payload=payload)
+
+    def _governed_dual(self, operation_id: str, slot: str, source: Path, target: Path) -> None:
+        context = self._take_filesystem_effect_context(operation_id, target, source)
+        context.begin()
+        source_root_id = getattr(context, "source_root_id", None)
+        source_root_path = getattr(context, "source_root_path", None)
+        if not source_root_id or source_root_path is None:
+            raise RuntimeError("filesystem_effect_source_binding_required")
+        context.execute_dual_path(slot, operation_id, source_root_id, source_root_path, source, target)
 
     def _ssd_available(self) -> bool:
         return self.ssd_root.exists() and self.ssd_root.is_dir()
@@ -115,119 +139,56 @@ class PreventiveGrowthProducerRouting:
         return self.root / f"{local_path.name}.pre_f17_8_local_backup_{stamp}"
 
     def _copy_tree_contents(self, source: Path, destination: Path) -> None:
-        destination.mkdir(parents=True, exist_ok=True)
         if not source.exists():
             return
-        if source.is_file():
-            shutil.copy2(source, destination / source.name)
-            return
-        for item in source.iterdir():
-            dst = destination / item.name
-            if item.is_dir() and not item.is_symlink():
-                shutil.copytree(item, dst, dirs_exist_ok=True)
-            elif item.is_file() or item.is_symlink():
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                if dst.exists() or dst.is_symlink():
-                    if dst.is_dir() and not dst.is_symlink():
-                        shutil.rmtree(dst)
-                    else:
-                        dst.unlink()
-                shutil.copy2(item, dst)
+        self._governed_dual("FS_COPY_TREE_MERGE", "p162g6_97_copy_tree_merge", source, destination)
 
     def _route_one(self, directory: str, dry_run: bool, persist_probe: bool) -> Dict[str, Any]:
         local = self.root / directory
         destination = self._destination_for(directory)
         before = self._count_and_size(local)
-
         record: Dict[str, Any] = {
-            "directory": directory,
-            "local_path": str(local),
-            "destination": str(destination),
-            "exists_before": local.exists(),
-            "is_symlink_before": local.is_symlink(),
-            "resolved_before": str(local.resolve()) if local.exists() else None,
-            "before": before,
-            "dry_run": dry_run,
-            "status": "planned",
-            "backup_path": None,
-            "copy_performed": False,
-            "symlink_created": False,
-            "write_probe_success": False,
-            "verified": False,
-            "error": None,
+            "directory": directory, "local_path": str(local), "destination": str(destination),
+            "exists_before": local.exists(), "is_symlink_before": local.is_symlink(),
+            "resolved_before": str(local.resolve()) if local.exists() else None, "before": before,
+            "dry_run": dry_run, "status": "planned", "backup_path": None, "copy_performed": False,
+            "symlink_created": False, "write_probe_success": False, "verified": False, "error": None,
         }
-
         if not self._ssd_available():
-            record["status"] = "skipped_ssd_unavailable"
-            return record
-
+            record["status"] = "skipped_ssd_unavailable"; return record
         if local.exists() and local.is_symlink():
             target_under_ssd = self._under_ssd(local)
             record["status"] = "already_symlinked" if target_under_ssd else "symlink_not_under_ssd"
             if persist_probe and target_under_ssd and not dry_run:
                 try:
-                    probe = local / f"f17_8_probe_{directory}.json"
-                    probe.write_text(json.dumps({
-                        "primitive": self.primitive,
-                        "refinement": self.refinement,
-                        "directory": directory,
-                        "timestamp_utc": _utc(),
-                    }, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-                    record["write_probe_success"] = probe.exists() and self._under_ssd(probe)
-                except Exception as exc:
-                    record["error"] = repr(exc)
+                    probe_target = destination / f"f17_8_probe_{directory}.json"
+                    payload = json.dumps({"primitive":self.primitive,"refinement":self.refinement,"directory":directory,"timestamp_utc":_utc()},ensure_ascii=False,sort_keys=True).encode("utf-8")
+                    self._governed_path("FS_WRITE_REPLACE_BYTES","p162g6_98_probe_replace",probe_target,payload)
+                    record["write_probe_success"] = probe_target.exists() and self._under_ssd(probe_target)
+                except Exception as exc: record["error"] = repr(exc)
             record["verified"] = target_under_ssd and (not persist_probe or dry_run or record["write_probe_success"])
             return record
-
         if dry_run:
-            record["status"] = "planned_route_to_ssd"
-            record["verified"] = False
-            return record
-
+            record["status"] = "planned_route_to_ssd"; return record
         try:
-            destination.mkdir(parents=True, exist_ok=True)
-
+            self._governed_path("FS_CREATE_DIRS","p162g6_98_destination_create",destination)
             if local.exists():
-                self._copy_tree_contents(local, destination)
-                record["copy_performed"] = True
-                backup = self._backup_path_for(local)
-                if backup.exists() or backup.is_symlink():
-                    backup = self.root / f"{backup.name}_dup"
-                local.rename(backup)
-                record["backup_path"] = str(backup)
-            else:
-                destination.mkdir(parents=True, exist_ok=True)
-
-            os.symlink(destination, local, target_is_directory=True)
-            record["symlink_created"] = True
-
+                self._copy_tree_contents(local,destination); record["copy_performed"] = True
+                backup=self._backup_path_for(local)
+                if backup.exists() or backup.is_symlink(): backup=self.root/f"{backup.name}_dup"
+                self._governed_dual("FS_MOVE_PATH","p162g6_98_local_backup_move",local,backup)
+                record["backup_path"]=str(backup)
+            self._governed_dual("FS_CREATE_SYMLINK","p162g6_98_symlink_create",destination,local)
+            record["symlink_created"]=True
             if persist_probe:
-                probe = local / f"f17_8_probe_{directory}.json"
-                probe.write_text(json.dumps({
-                    "primitive": self.primitive,
-                    "refinement": self.refinement,
-                    "directory": directory,
-                    "timestamp_utc": _utc(),
-                    "probe_type": "preventive_growth_routing",
-                }, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-                record["write_probe_success"] = probe.exists() and self._under_ssd(probe)
-
-            after_target = self._count_and_size(destination)
-            record["after_target"] = after_target
-            record["status"] = "routed"
-            record["verified"] = (
-                local.exists()
-                and local.is_symlink()
-                and self._under_ssd(local)
-                and after_target["file_count"] >= before["file_count"]
-                and after_target["size_bytes"] >= before["size_bytes"]
-                and (not persist_probe or record["write_probe_success"])
-            )
-
+                probe_target=destination/f"f17_8_probe_{directory}.json"
+                payload=json.dumps({"primitive":self.primitive,"refinement":self.refinement,"directory":directory,"timestamp_utc":_utc(),"probe_type":"preventive_growth_routing"},ensure_ascii=False,indent=2,sort_keys=True).encode("utf-8")
+                self._governed_path("FS_WRITE_REPLACE_BYTES","p162g6_98_probe_replace",probe_target,payload)
+                record["write_probe_success"]=probe_target.exists() and self._under_ssd(probe_target)
+            after_target=self._count_and_size(destination); record["after_target"]=after_target; record["status"]="routed"
+            record["verified"]=(local.exists() and local.is_symlink() and self._under_ssd(local) and after_target["file_count"]>=before["file_count"] and after_target["size_bytes"]>=before["size_bytes"] and (not persist_probe or record["write_probe_success"]))
         except Exception as exc:
-            record["status"] = "error"
-            record["error"] = repr(exc)
-
+            record["status"]="error"; record["error"]=repr(exc)
         return record
 
     def _verify_only(self, directory: str, persist_probe: bool = True) -> Dict[str, Any]:
@@ -249,13 +210,14 @@ class PreventiveGrowthProducerRouting:
         if local.exists() and local.is_symlink() and record["resolved_under_ssd"] and persist_probe:
             try:
                 probe = local / f"f17_8_verify_{directory}.json"
-                probe.write_text(json.dumps({
+                payload = json.dumps({
                     "primitive": self.primitive,
                     "refinement": self.refinement,
                     "directory": directory,
                     "timestamp_utc": _utc(),
                     "probe_type": "verification",
-                }, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+                }, ensure_ascii=False, sort_keys=True).encode("utf-8")
+                self._governed_path("FS_WRITE_REPLACE_BYTES", "p162g6_postv3_verify_probe_replace", probe, payload)
                 record["write_probe_success"] = probe.exists() and self._under_ssd(probe)
             except Exception as exc:
                 record["error"] = repr(exc)
@@ -324,13 +286,11 @@ class PreventiveGrowthProducerRouting:
         }
 
         base = self._report_base()
-        base.mkdir(parents=True, exist_ok=True)
         state_path = base / "f17_8_preventive_growth_producer_routing_state.json"
         history_path = base / "f17_8_preventive_growth_producer_routing_history.jsonl"
-
-        state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        with history_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        self._governed_path("FS_CREATE_DIRS", "p162g6_postv3_report_dir_create", base)
+        self._governed_path("FS_WRITE_REPLACE_BYTES", "p162g6_postv3_report_state_replace", state_path, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"))
+        self._governed_path("FS_APPEND_BYTES", "p162g6_postv3_report_history_append", history_path, (json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8"))
 
         return {
             "primitive": self.primitive,

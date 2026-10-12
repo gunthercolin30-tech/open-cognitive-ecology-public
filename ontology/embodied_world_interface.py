@@ -9,7 +9,7 @@ import os
 import platform
 import shutil
 import socket
-import subprocess
+from ontology.governed_local_system_probe import probe_text
 
 PRIMITIVE = "embodied_world_interface"
 REFINEMENT = "G1-R1"
@@ -65,17 +65,12 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _command_output(command: List[str], timeout: float = 2.0) -> str:
     try:
-        completed = subprocess.run(
-            command,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=timeout,
-            check=False,
-        )
-        return completed.stdout or ""
+        if not command:
+            return ""
+        return probe_text(command[0], *command[1:], timeout_seconds=timeout)
     except Exception:
         return ""
+
 
 
 class EmbodiedWorldInterface:

@@ -63,8 +63,9 @@ class DistributedCivilizationalContinuityCertification:
     assert phenomenal subjectivity.
     """
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Optional[Path] = None, filesystem_effect_context_provider=None) -> None:
         self.root = Path(root) if root else ROOT
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
         continuity_root = _ssd_continuity_root()
         if continuity_root is not None:
             self.cert_root = continuity_root / "certifications"
@@ -74,7 +75,15 @@ class DistributedCivilizationalContinuityCertification:
             self.cert_root = self.root / "distributed_nodes" / "continuity_certifications"
             self.history_path = self.cert_root / "distributed_civilizational_continuity_certification_history.jsonl"
             self.registry_path = self.cert_root / "distributed_civilizational_continuity_certification_registry.json"
-        self.cert_root.mkdir(parents=True, exist_ok=True)
+        if not self.cert_root.exists():
+            provider = self.filesystem_effect_context_provider
+            if provider is None or not callable(provider):
+                raise RuntimeError("filesystem_effect_context_provider_required")
+            context = provider("FS_CREATE_DIRS", self.cert_root)
+            if context is None:
+                raise RuntimeError("preissued_filesystem_effect_context_required")
+            context.begin()
+            context.execute_path("cert_root", "FS_CREATE_DIRS", self.cert_root)
 
     def _dependency_readiness(self) -> Dict[str, Any]:
         available = []

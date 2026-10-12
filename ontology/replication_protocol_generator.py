@@ -357,7 +357,7 @@ class ReplicationProtocolGenerator:
 
     def _git_remote_text(self) -> str:
         try:
-            import subprocess
+            from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
             out = subprocess.run(["git", "remote", "-v"], cwd=str(self.root), text=True, capture_output=True, timeout=5)
             return (out.stdout or "") + (out.stderr or "")
         except Exception:

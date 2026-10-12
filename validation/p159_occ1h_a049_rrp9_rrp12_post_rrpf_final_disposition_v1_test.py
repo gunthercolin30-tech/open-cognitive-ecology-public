@@ -1,0 +1,12 @@
+from pathlib import Path
+import json
+R=Path(__file__).resolve().parents[1];P=R/'validation_artifacts/p159/occ1h/a049/a049_rrp9_rrp12_post_rrpf_final_disposition_v1.json'
+def d(): return json.loads(P.read_text())
+def test_final_disposition():
+ x=d(); assert x['RRP9']['ROOT_MATERIALITY_STATUS']=='ROOT'; assert x['RRP12']['FINAL_DISPOSITION']=='ROOT + RESOLVED_EMPIRICALLY'; assert x['RRP12']['scenario_verdict']=='RESISTED'; assert x['RRP12']['criticality_changed'] is False
+def test_causal_and_blocker_elimination():
+ x=d(); assert x['RRP9']['ROOT_INVARIANTS']==['DNA.L0.2','DNA.L0.3','DNA.L0.5']; assert x['RRP10']['REMAINING_BLOCKER'] is None; assert x['RRP11']['CLOSURE_ELIGIBILITY'] is True
+def test_epistemic_limits():
+ x=d(); e=x['epistemic_limits']; assert e['functional_only'] is True; assert e['phenomenology_undetermined'] is True; assert e['no_global_absence_of_counterexamples_claim'] is True; assert e['a042_substituted_for_a049'] is False
+def test_boundaries():
+ assert d()['boundaries']=={'occ1h_closed':False,'p159_final_lock':False,'p160_opened':False}

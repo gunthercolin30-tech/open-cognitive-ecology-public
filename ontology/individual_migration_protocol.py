@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
 
 import hashlib
 import json
@@ -65,18 +66,12 @@ class IndividualMigrationProtocol:
         ).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()
 
-    def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(
-                payload,
-                indent=2,
-                sort_keys=True,
-                ensure_ascii=False,
-                default=str,
-            ),
-            encoding="utf-8",
-        )
+    def _write_json(self, path: Path, payload: dict[str, Any], fs_context: GovernedFilesystemEffectContext | None = None) -> None:
+        if fs_context is None:
+            raise PermissionError("preissued filesystem context required")
+        data=json.dumps(payload,indent=2,sort_keys=True,ensure_ascii=False,default=str).encode("utf-8")
+        fs_context.execute_path("json_parent_create","FS_CREATE_DIR",path.parent)
+        fs_context.execute_path("json_write","FS_WRITE_BYTES",path,data)
 
     def _append_history(self, payload: dict[str, Any]) -> bool:
         try:
@@ -129,7 +124,7 @@ class IndividualMigrationProtocol:
             from ontology.distributed_civilizational_memory import (
                 DistributedCivilizationalMemory,
             )
-            return DistributedCivilizationalMemory().step()
+            return DistributedCivilizationalMemory().step(persist=False)
         except Exception as exc:
             return {"memory_survival_probability": 0.0, "error": repr(exc)}
 
@@ -310,7 +305,7 @@ class IndividualMigrationProtocol:
         except Exception:
             return None, False
 
-    def step(self, state: dict[str, Any] | None = None) -> dict[str, Any]:
+    def step(self, state: dict[str, Any] | None = None, fs_context: GovernedFilesystemEffectContext | None = None) -> dict[str, Any]:
         start = time.perf_counter()
         state = state or {}
 
@@ -344,7 +339,7 @@ class IndividualMigrationProtocol:
 
         export_path = self.package_root / f"{migration_id}.json"
         transfer_path = self.import_root / f"{target_host}_{migration_id}.json"
-        self._write_json(export_path, package)
+        self._write_json(export_path, package, fs_context=fs_context)
 
         transfer_success = not transfer_failure
         if transfer_success:
@@ -352,7 +347,7 @@ class IndividualMigrationProtocol:
             if corrupt_package:
                 transfer_payload["individual_state"] = dict(transfer_payload["individual_state"])
                 transfer_payload["individual_state"]["corruption_marker"] = "forced_corruption"
-            self._write_json(transfer_path, transfer_payload)
+            self._write_json(transfer_path, transfer_payload, fs_context=fs_context)
 
         imported_package, checksum_match = (
             self._read_imported_package(transfer_path)
@@ -527,7 +522,7 @@ class IndividualMigrationProtocol:
                 "migration_success_rate": result["migration_success_rate"],
                 "post_migration_viability": result["post_migration_viability"],
             }
-            self._write_json(self.registry_path, registry)
+            self._write_json(self.registry_path, registry, fs_context=fs_context)
         except Exception:
             pass
         return result

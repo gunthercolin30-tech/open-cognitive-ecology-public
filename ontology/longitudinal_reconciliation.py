@@ -18,8 +18,14 @@ from ontology.longitudinal_recovery_observer import (
 
 class LongitudinalReconciliation:
 
-    def __init__(self):
+    def __init__(
+        self,
+        observer_meta_analysis_archive_dir=None,
+        observer_meta_analysis_fs_context=None,
+    ):
         self.root = Path.home() / "open-cognitive-ecology"
+        self.observer_meta_analysis_archive_dir = observer_meta_analysis_archive_dir
+        self.observer_meta_analysis_fs_context = observer_meta_analysis_fs_context
         self.partition_root = (
             self.root / "runtime_experiments" / "a13_real_partition"
         )
@@ -56,7 +62,10 @@ class LongitudinalReconciliation:
                 }
             )
 
-        observer = LongitudinalRecoveryObserver()
+        observer = LongitudinalRecoveryObserver(
+            meta_analysis_archive_dir=self.observer_meta_analysis_archive_dir,
+            meta_analysis_fs_context=self.observer_meta_analysis_fs_context,
+        )
 
         longitudinal = observer.step(runs)
 

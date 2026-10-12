@@ -638,6 +638,7 @@ class ControlledEvolutionOrchestrator:
         inputs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         inputs = dict(inputs or {})
+        metrics_effect_context = inputs.pop("metrics_effect_context", None)
 
         orchestration_result = None
         proposal = inputs.get("proposal")
@@ -676,6 +677,7 @@ class ControlledEvolutionOrchestrator:
                 validation_status="validated" if metrics.get("controlled_evolution_certified") else "observed",
                 governance_status="governed",
                 runtime_status="operational",
+                effect_context=metrics_effect_context,
             )
         except Exception:
             pass

@@ -1,0 +1,2 @@
+from acee6_k5_transaction_runner import DIST,verify,sha
+r={'transaction_count':100,'distribution':DIST,'committed_count':50,'unexpected_outcome_count':0,'unhandled_exception_count':0,'partial_success_count':0,'journal_chain_failure_count':0,'real_root_mutation_count':0,'cleanup_failure_count':0};r['report_hash']=sha(r);r['committed_count']=0;assert 'report_hash_invalid' in verify(r)['reasons'];print('ACEE6_K5_REPORT_TAMPER_OK')

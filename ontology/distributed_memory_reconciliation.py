@@ -22,7 +22,7 @@ class DistributedMemoryReconciliation:
                 states.append(json.loads(path.read_text(encoding="utf-8")))
         return states
 
-    def step(self):
+    def step(self, *, filesystem_context=None):
         states = self._load_states()
         cardinality_factor = round(min(1.0, len(states) / 3.0), 4)
 
@@ -99,7 +99,10 @@ class DistributedMemoryReconciliation:
             CivilizationalMemoryArchive().archive(
                 category="a13_memory_reconciliation_v2",
                 payload=merged_state,
+                filesystem_context=filesystem_context,
             )
+        except RuntimeError:
+            raise
         except Exception:
             pass
 

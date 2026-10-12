@@ -9,7 +9,7 @@ from pathlib import Path
 class ScientificSelfRevisionController:
     primitive = "SCIENTIFIC_SELF_REVISION_CONTROLLER"
 
-    def __init__(self, archive_dir=None):
+    def __init__(self, archive_dir=None, fs_context=None):
         if archive_dir is None:
             archive_dir = (
                 Path.home()
@@ -18,7 +18,19 @@ class ScientificSelfRevisionController:
                 / "scientific_self_revision"
             )
         self.archive_dir = Path(archive_dir)
-        self.archive_dir.mkdir(parents=True, exist_ok=True)
+        if self.archive_dir.exists():
+            if not self.archive_dir.is_dir():
+                raise RuntimeError("scientific archive path is not a directory")
+        else:
+            if fs_context is None:
+                raise RuntimeError("governed filesystem context required to create scientific archive directory")
+            fs_context.execute_path(
+                "archive_create_dirs",
+                "FS_CREATE_DIRS",
+                self.archive_dir,
+            )
+            if not self.archive_dir.is_dir():
+                raise RuntimeError("governed scientific archive directory creation not confirmed")
 
     def step(self, paradigm_result):
         if (
@@ -89,4 +101,4 @@ if __name__ == "__main__":
         "publication_ready": True,
     }
 
-    pprint(ScientificSelfRevisionController().step(sample))
+    pprint(ScientificSelfRevisionController(archive_dir=Path.cwd()).step(sample))

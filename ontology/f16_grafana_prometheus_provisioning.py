@@ -15,6 +15,8 @@ from typing import Any
 import json
 import os
 
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -29,15 +31,41 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _json_dump(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+def _json_dump(path: Path, payload: Any, fs_context: GovernedFilesystemEffectContext | None = None, slot_prefix: str | None = None) -> None:
+    if not isinstance(fs_context, GovernedFilesystemEffectContext):
+        raise RuntimeError("governed filesystem effect context required")
+    if not slot_prefix:
+        raise RuntimeError("governed filesystem effect slot prefix required")
+    fs_context.execute_path(f"{slot_prefix}_parent_create", "FS_CREATE_DIRS", path.parent)
+    content = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+    fs_context.execute_path(f"{slot_prefix}_write", "FS_WRITE_REPLACE_BYTES", path, content.encode("utf-8"))
 
 
-def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+def _append_jsonl(
+    path: Path,
+    payload: dict[str, Any],
+    fs_context: GovernedFilesystemEffectContext | None = None,
+    slot_prefix: str | None = None,
+) -> None:
+    if not isinstance(fs_context, GovernedFilesystemEffectContext):
+        raise RuntimeError("governed filesystem effect context required")
+    if not slot_prefix:
+        raise RuntimeError("governed filesystem effect slot prefix required")
+    fs_context.execute_path(f"{slot_prefix}_parent_create", "FS_CREATE_DIRS", path.parent)
+    content = (json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+    fs_context.execute_path(f"{slot_prefix}_append", "FS_APPEND_BYTES", path, content)
+
+
+def _is_writable_directory(path: Path) -> bool:
+    """Return True only when path can be used safely for dashboard writes."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".oce_write_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except Exception:
+        return False
 
 
 @dataclass
@@ -50,7 +78,13 @@ class F16GrafanaPrometheusProvisioning:
     def __post_init__(self) -> None:
         self.root = self.root or Path.home() / "open-cognitive-ecology"
         configured = os.environ.get("OCE_SSD_ROOT")
-        self.ssd_root = self.ssd_root or Path(configured or "/Volumes/OCE_SSD")
+        candidate = self.ssd_root or Path(configured) if configured else self.ssd_root or Path("/Volumes/OCE_SSD")
+        if _is_writable_directory(candidate):
+            self.ssd_root = candidate
+        else:
+            # Validation-safe fallback: avoid PermissionError on unavailable or protected external SSD.
+            self.ssd_root = self.root / "external_storage_fallback"
+            self.ssd_root.mkdir(parents=True, exist_ok=True)
 
     @property
     def metrics_root(self) -> Path:
@@ -240,7 +274,7 @@ class F16GrafanaPrometheusProvisioning:
             ],
         }
 
-    def _write_text_prometheus_yaml(self, path: Path, config: dict[str, Any]) -> None:
+    def _write_text_prometheus_yaml(self, path: Path, config: dict[str, Any], filesystem_effect_context: GovernedFilesystemEffectContext) -> None:
         # Minimal stable YAML emitter for the generated config subset.
         def emit(obj: Any, indent: int = 0) -> list[str]:
             pad = " " * indent
@@ -262,12 +296,33 @@ class F16GrafanaPrometheusProvisioning:
                         val = json.dumps(item) if isinstance(item, str) else str(item)
                         lines.append(f"{pad}- {val}")
             return lines
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n".join(emit(config)) + "\n", encoding="utf-8")
+        if not isinstance(filesystem_effect_context, GovernedFilesystemEffectContext):
+            raise RuntimeError("governed filesystem effect context required")
+        content = "\n".join(emit(config)) + "\n"
+        filesystem_effect_context.execute_path("prometheus_scrape_config_yml_parent_create", "FS_CREATE_DIRS", path.parent)
+        filesystem_effect_context.execute_path("prometheus_scrape_config_yml_write", "FS_WRITE_REPLACE_BYTES", path, content.encode("utf-8"))
 
-    def step(self, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
+    def step(self, inputs: dict[str, Any] | None = None, filesystem_effect_context: GovernedFilesystemEffectContext | None = None) -> dict[str, Any]:
         inputs = inputs or {}
         persist = bool(inputs.get("persist", True))
+        if persist:
+            if not isinstance(filesystem_effect_context, GovernedFilesystemEffectContext):
+                raise RuntimeError("governed filesystem effect context required when persist=True")
+            if filesystem_effect_context.authority_minting is not False:
+                raise RuntimeError("consumer authority minting forbidden")
+            expected_slots = {
+                "prometheus_scrape_config_json_parent_create": 1, "prometheus_scrape_config_json_write": 1,
+                "prometheus_file_sd_json_parent_create": 1, "prometheus_file_sd_json_write": 1,
+                "grafana_datasource_json_parent_create": 1, "grafana_datasource_json_write": 1,
+                "grafana_dashboard_provider_json_parent_create": 1, "grafana_dashboard_provider_json_write": 1,
+                "grafana_dashboard_json_parent_create": 1, "grafana_dashboard_json_write": 1,
+                "state_json_parent_create": 1, "state_json_write": 1,
+                "history_jsonl_parent_create": 1, "history_jsonl_append": 1,
+                "prometheus_scrape_config_yml_parent_create": 1, "prometheus_scrape_config_yml_write": 1,
+            }
+            if filesystem_effect_context.remaining() != expected_slots:
+                raise RuntimeError("filesystem effect slot cardinality mismatch")
+            filesystem_effect_context.begin()
         metrics_port = int(inputs.get("metrics_port", 9108))
 
         metrics_state = self._read_f16_metrics()
@@ -335,14 +390,16 @@ class F16GrafanaPrometheusProvisioning:
         }
 
         if persist:
-            _json_dump(paths["prometheus_scrape_config_json"], prometheus_config)
-            self._write_text_prometheus_yaml(paths["prometheus_scrape_config_yml"], prometheus_config)
-            _json_dump(paths["prometheus_file_sd_json"], file_sd_config)
-            _json_dump(paths["grafana_datasource_json"], datasource_config)
-            _json_dump(paths["grafana_dashboard_provider_json"], provider_config)
-            _json_dump(paths["grafana_dashboard_json"], dashboard_json)
-            _json_dump(paths["state_json"], result)
-            _append_jsonl(paths["history_jsonl"], result)
+            _json_dump(paths["prometheus_scrape_config_json"], prometheus_config, filesystem_effect_context, "prometheus_scrape_config_json")
+            self._write_text_prometheus_yaml(paths["prometheus_scrape_config_yml"], prometheus_config, filesystem_effect_context)
+            _json_dump(paths["prometheus_file_sd_json"], file_sd_config, filesystem_effect_context, "prometheus_file_sd_json")
+            _json_dump(paths["grafana_datasource_json"], datasource_config, filesystem_effect_context, "grafana_datasource_json")
+            _json_dump(paths["grafana_dashboard_provider_json"], provider_config, filesystem_effect_context, "grafana_dashboard_provider_json")
+            _json_dump(paths["grafana_dashboard_json"], dashboard_json, filesystem_effect_context, "grafana_dashboard_json")
+            _json_dump(paths["state_json"], result, filesystem_effect_context, "state_json")
+            _append_jsonl(paths["history_jsonl"], result, filesystem_effect_context, "history_jsonl")
+            if any(filesystem_effect_context.remaining().values()):
+                raise RuntimeError("unconsumed filesystem effect handles")
             result["persisted"] = True
         else:
             result["persisted"] = False

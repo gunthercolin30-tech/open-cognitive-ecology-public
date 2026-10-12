@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import json
-import subprocess
+from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path

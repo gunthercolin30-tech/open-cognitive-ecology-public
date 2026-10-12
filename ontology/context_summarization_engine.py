@@ -33,10 +33,14 @@ class ContextSummarizationEngine:
     ]
 
     def __init__(self, root: Path | None = None, history_file: Path | None = None,
-                 max_summary_chars: int = 1800, max_sentences: int = 18) -> None:
+                 max_summary_chars: int = 1800, max_sentences: int = 18, filesystem_effect_context=None) -> None:
         self.root = Path(root) if root is not None else Path.home() / "open-cognitive-ecology"
         self.history_file = Path(history_file) if history_file is not None else self.root / "context_summarization_history.jsonl"
-        self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        if filesystem_effect_context is None:
+            raise PermissionError('filesystem parent creation requires preissued filesystem effect context')
+        if not self.history_file.parent.exists():
+            filesystem_effect_context.begin()
+            filesystem_effect_context.execute_path('init_parent_create', 'FS_CREATE_DIR', self.history_file.parent)
         self.max_summary_chars = max(400, int(max_summary_chars))
         self.max_sentences = max(4, int(max_sentences))
 

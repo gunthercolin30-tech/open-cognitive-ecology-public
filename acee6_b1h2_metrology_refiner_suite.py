@@ -1,0 +1,5 @@
+from acee6_a_global_validation_scope_test import *
+from acee6_a_refiner_forward_compatibility_test import *
+from acee6_a_refiner_order_independence_test import *
+from acee6_a_snapshot_corruption_test import *
+print('ACEE6_B1H2_METROLOGY_REFINER_ALL_OK')

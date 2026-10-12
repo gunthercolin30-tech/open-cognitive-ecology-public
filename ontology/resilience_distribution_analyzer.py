@@ -8,10 +8,17 @@ from ontology.scientific_meta_analysis_engine import (
 
 class ResilienceDistributionAnalyzer:
 
-    def __init__(self):
+    def __init__(
+        self,
+        meta_analysis_archive_dir=None,
+        meta_analysis_fs_context=None,
+    ):
 
         self.meta_analysis_engine = (
-            ScientificMetaAnalysisEngine()
+            ScientificMetaAnalysisEngine(
+                archive_dir=meta_analysis_archive_dir,
+                fs_context=meta_analysis_fs_context,
+            )
         )
 
     def _bounded(self, value):

@@ -22,7 +22,7 @@ class PersistentCivilizationalRuntime:
         self.persistence = CivilizationalStatePersistence()
         self.governor = AutonomousCivilizationalGovernor()
 
-    def step(self) -> dict:
+    def step(self, filesystem_context=None) -> dict:
         try:
             load_result = self.persistence.load()
             state = load_result.get("state", {})
@@ -53,7 +53,10 @@ class PersistentCivilizationalRuntime:
         updated_state = dict(state)
         updated_state.update(governance_result)
 
-        save_result = self.persistence.save(updated_state)
+        save_result = self.persistence.save(
+            updated_state,
+            filesystem_context=filesystem_context,
+        )
 
         return {
             "primitive": self.primitive,

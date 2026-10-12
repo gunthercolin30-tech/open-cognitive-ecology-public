@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ontology.semantic_translation_engine import SemanticTranslationEngine
+from ontology.governed_network_effector import GovernedNetworkEffector, GovernedNetworkRequest, UrllibTrustedTransport
 
 """Knowledge Acquisition Engine.
 
@@ -16,8 +17,12 @@ import re
 
 
 class KnowledgeAcquisitionEngine:
-    def __init__(self) -> None:
+    def __init__(self, governed_network_context=None) -> None:
         self.translation_engine = SemanticTranslationEngine()
+        self.governed_network_context = governed_network_context
+
+    def set_governed_network_context(self, context) -> None:
+        self.governed_network_context = context
 
     primitive = "KNOWLEDGE_ACQUISITION_ENGINE"
 
@@ -174,7 +179,6 @@ class KnowledgeAcquisitionEngine:
     def search_web(self, query: str) -> Optional[str]:
         import json
         import urllib.parse
-        import urllib.request
 
         query = self.normalize_query(query)
         if not query:
@@ -189,8 +193,15 @@ class KnowledgeAcquisitionEngine:
                 "skip_disambig": 0,
             })
 
-            with urllib.request.urlopen(url, timeout=10) as response:
-                data = json.loads(response.read().decode("utf-8"))
+            ctx = self.governed_network_context
+            if not isinstance(ctx, dict) or ctx.get("handle") is None:
+                return None
+            effector = ctx.get("effector") or GovernedNetworkEffector(transport=UrllibTrustedTransport(), credential_resolver=ctx.get("credential_resolver"))
+            result = effector.execute(request=GovernedNetworkRequest("GET", url, {}, timeout_seconds=10.0, idempotent=True), handle=ctx.get("handle"), brokered_use=ctx.get("brokered_use"), adapter_id=ctx.get("adapter_id"), effector_id=ctx.get("effector_id"), now_iso=ctx.get("now_iso"))
+            if result.get("status") != "EFFECT_CONFIRMED": return None
+            payload = (result.get("transport_result") or {}).get("body")
+            if not isinstance(payload, (bytes, bytearray)): return None
+            data = json.loads(bytes(payload).decode("utf-8"))
 
             text = (data.get("AbstractText") or "").strip()
             if text:

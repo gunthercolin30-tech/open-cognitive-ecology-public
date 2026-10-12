@@ -54,11 +54,12 @@ class RealChatGPTManualExecutionDemonstrator:
             v = low
         return max(low, min(high, v))
 
-    def _append_jsonl(self, path: Path, record: Dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-
+    def _append_jsonl(self, path: Path, record: Dict[str, Any], fs_context=None) -> None:
+        if fs_context is None:
+            raise PermissionError("JSONL append requires preissued filesystem effect context")
+        data = (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        fs_context.execute_path("jsonl_parent_create", "FS_CREATE_DIR", path.parent)
+        fs_context.execute_path("jsonl_append", "FS_APPEND_BYTES", path, data)
     def _safe_import(self, module_name: str, class_name: str):
         try:
             module = __import__(f"ontology.{module_name}", fromlist=[class_name])
@@ -151,10 +152,10 @@ Contraintes de réponse :
             ],
         }
 
-    def create_query(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def create_query(self, payload: Optional[Dict[str, Any]] = None, fs_context=None) -> Dict[str, Any]:
         record = self._build_query_record(payload)
-        self._append_jsonl(self.queue_path, record)
-        self._append_jsonl(self.query_archive_path, record)
+        self._append_jsonl(self.queue_path, record, fs_context=fs_context)
+        self._append_jsonl(self.query_archive_path, record, fs_context=fs_context)
         prompt_path = self.demo_dir / f"{record['query_id']}_prompt.txt"
         prompt_path.write_text(record["prompt"], encoding="utf-8")
         return {
@@ -288,7 +289,7 @@ Contraintes de réponse :
             # conservative fallback because governance review already protects continuity markers
             return {"primitive": "civilizational_continuity_guardian", "success": True, "civilizational_continuity_score": 0.86, "fallback": True}
 
-    def process_response(self, response_text: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def process_response(self, response_text: str, payload: Optional[Dict[str, Any]] = None, fs_context=None) -> Dict[str, Any]:
         payload = payload or {}
         query_record = payload.get("query_record") or self._build_query_record(payload)
         query_record = dict(query_record)
@@ -308,7 +309,7 @@ Contraintes de réponse :
             "manual_capture": True,
             "credentials_stored": False,
         }
-        self._append_jsonl(self.response_archive_path, response_record)
+        self._append_jsonl(self.response_archive_path, response_record, fs_context=fs_context)
 
         parsed = self._parse_response(response_text, query_record)
         contradiction = self._detect_contradictions(parsed, query_record)
@@ -409,7 +410,7 @@ Contraintes de réponse :
         record_path = self.demo_dir / f"{query_record.get('query_id')}_result.json"
         record_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         result["record_path"] = str(record_path)
-        self._append_jsonl(self.history_path, result)
+        self._append_jsonl(self.history_path, result, fs_context=fs_context)
         self._record_metrics(result)
         return result
 
@@ -437,7 +438,7 @@ Contraintes de réponse :
         except Exception:
             return
 
-    def step(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def step(self, payload: Optional[Dict[str, Any]] = None, fs_context=None) -> Dict[str, Any]:
         payload = payload or {}
         if payload.get("simulate_external_failure"):
             query = self._build_query_record(payload)
@@ -458,7 +459,7 @@ Contraintes de réponse :
                 "classification": "Real ChatGPT Manual Demonstration Degraded",
                 "diagnostics": {"simulated_external_failure": True},
             }
-            self._append_jsonl(self.history_path, result)
+            self._append_jsonl(self.history_path, result, fs_context=fs_context)
             return result
 
         response_text = payload.get("response_text")
@@ -466,8 +467,8 @@ Contraintes de réponse :
         if response_text is None and response_file:
             response_text = Path(response_file).read_text(encoding="utf-8")
         if response_text is not None:
-            return self.process_response(str(response_text), payload)
-        return self.create_query(payload)
+            return self.process_response(str(response_text), payload, fs_context=fs_context)
+        return self.create_query(payload, fs_context=fs_context)
 
 
 def main() -> None:

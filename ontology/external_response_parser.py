@@ -92,24 +92,28 @@ class ExternalResponseParser:
         root: str | Path | None = None,
         history_file: str | Path | None = None,
         max_candidate_length: int = 900,
-    ) -> None:
+     filesystem_effect_context=None) -> None:
         self.root = Path(root) if root is not None else Path.home() / "open-cognitive-ecology"
         self.history_file = Path(history_file) if history_file is not None else self.root / "external_response_parser_history.jsonl"
         self.max_candidate_length = max(120, int(max_candidate_length))
-        self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        if filesystem_effect_context is None:
+            raise PermissionError('filesystem parent creation requires preissued filesystem effect context')
+        if not self.history_file.parent.exists():
+            filesystem_effect_context.begin()
+            filesystem_effect_context.execute_path('init_parent_create', 'FS_CREATE_DIR', self.history_file.parent)
 
     def _append_jsonl(self, path: Path, record: dict[str, Any]) -> None:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
 
-    def _record_metrics(self, payload: dict[str, Any]) -> None:
+    def _record_metrics(self, payload: dict[str, Any], metrics_effect_context=None) -> None:
         try:
             from ontology.metrics_history_recorder import MetricsHistoryRecorder
-            MetricsHistoryRecorder(root=self.root).record(payload)
+            MetricsHistoryRecorder(root=self.root).record(payload, effect_context=metrics_effect_context)
         except Exception:
             try:
                 from ontology.metrics_history_recorder import MetricsHistoryRecorder
-                MetricsHistoryRecorder(root=self.root).step(payload)
+                MetricsHistoryRecorder(root=self.root).step(payload, effect_context=metrics_effect_context)
             except Exception:
                 pass
 
@@ -227,6 +231,7 @@ class ExternalResponseParser:
         context: str = "",
         metadata: dict[str, Any] | None = None,
         persist: bool = True,
+        metrics_effect_context=None,
     ) -> dict[str, Any]:
         text = _safe_text(response_text)
         now = _utc_now()
@@ -284,10 +289,10 @@ class ExternalResponseParser:
 
         if persist:
             self._append_jsonl(self.history_file, result)
-            self._record_metrics(result)
+            self._record_metrics(result, metrics_effect_context=metrics_effect_context)
         return result
 
-    def parse_queue_answer(self, query_record: dict[str, Any], persist: bool = True) -> dict[str, Any]:
+    def parse_queue_answer(self, query_record: dict[str, Any], persist: bool = True, metrics_effect_context=None) -> dict[str, Any]:
         return self.parse_response(
             response_text=query_record.get("response", ""),
             query_id=query_record.get("query_id"),
@@ -301,6 +306,7 @@ class ExternalResponseParser:
                 "answer_relevance_score": query_record.get("answer_relevance_score", 0.0),
             },
             persist=persist,
+            metrics_effect_context=metrics_effect_context,
         )
 
     def step(
@@ -310,9 +316,10 @@ class ExternalResponseParser:
         persist: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        metrics_effect_context = kwargs.pop("metrics_effect_context", None)
         if isinstance(query_record, dict):
-            return self.parse_queue_answer(query_record, persist=persist)
-        return self.parse_response(response_text or "", persist=persist, **kwargs)
+            return self.parse_queue_answer(query_record, persist=persist, metrics_effect_context=metrics_effect_context)
+        return self.parse_response(response_text or "", persist=persist, metrics_effect_context=metrics_effect_context, **kwargs)
 
 
 if __name__ == "__main__":

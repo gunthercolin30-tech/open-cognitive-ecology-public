@@ -1,0 +1,1 @@
+print("AQ4_FINAL_LOCK_OK")

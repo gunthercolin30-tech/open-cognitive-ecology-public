@@ -344,7 +344,7 @@ class EmbodiedRuntimeCouplingCertifier:
             "environmental_state_model": _safe_invoke("environmental_state_model"),
             "perception_action_feedback_loop": _safe_invoke("perception_action_feedback_loop"),
             "embodied_environmental_memory_integration": _safe_invoke("embodied_environmental_memory_integration"),
-            "embodied_world_model_update": _safe_invoke("embodied_world_model_update"),
+            "embodied_world_model_update": _safe_invoke("embodied_world_model_update", persist=False),
             "embodied_predictive_planning_bridge": _safe_invoke("embodied_predictive_planning_bridge"),
             "embodied_predictive_action_governance": _safe_invoke("embodied_predictive_action_governance"),
             "governed_predictive_action_execution_bridge": _safe_invoke("governed_predictive_action_execution_bridge"),

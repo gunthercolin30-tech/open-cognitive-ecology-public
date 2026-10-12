@@ -33,7 +33,7 @@ class StateReplicationIntegrityValidator:
             payload.encode("utf-8")
         ).hexdigest()
 
-    def step(self, state=None):
+    def step(self, state=None, filesystem_context=None):
 
         state = state or {
             "civilization": "open_cognitive_ecology",
@@ -45,6 +45,7 @@ class StateReplicationIntegrityValidator:
         self.persistence.save(
             state,
             "replication_source.json",
+            filesystem_context=filesystem_context,
         )
 
         restored = self.persistence.load(

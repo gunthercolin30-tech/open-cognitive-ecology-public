@@ -8,76 +8,78 @@ from ontology.external_compute_expansion_manager import (
 )
 
 ROOT = Path.home() / "open-cognitive-ecology"
-
 OUTPUT_DIR = ROOT / "runtime_experiments"
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-TIMESTAMP = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-
-OUTPUT_PATH = (
-    OUTPUT_DIR
-    / f"a3_longitudinal_validation_{TIMESTAMP}.jsonl"
-)
-
-manager = ExternalComputeExpansionManager()
-
 DURATION_SECONDS = 7200
 INTERVAL_SECONDS = 30
 
-start = time.time()
 
-print("Starting A3 longitudinal validation...")
-print(f"Output: {OUTPUT_PATH}")
+def run_validation(
+    duration_seconds: int = DURATION_SECONDS,
+    interval_seconds: int = INTERVAL_SECONDS,
+):
+    """Run the A3 longitudinal validation explicitly.
 
-cycle = 0
+    Importing this module must remain side-effect free. The long-running
+    experiment is executed only when run_validation() or main() is called.
+    """
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-while (time.time() - start) < DURATION_SECONDS:
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    output_path = OUTPUT_DIR / f"a3_longitudinal_validation_{timestamp}.jsonl"
 
-    governance = (
-        manager.adaptive_distributed_governance()
-    )
+    manager = ExternalComputeExpansionManager()
+    start = time.time()
 
-    ecological_snapshot = (
-        manager.record_ecological_runtime_snapshot()
-    )
+    print("Starting A3 longitudinal validation...")
+    print(f"Output: {output_path}")
 
-    distributed_snapshot = (
-        manager.record_distributed_runtime_snapshot()
-    )
+    cycle = 0
 
-    payload = {
-        "cycle": cycle,
-        "timestamp": datetime.utcnow().isoformat(),
-        "governance": governance,
-        "ecological_snapshot": ecological_snapshot,
-        "distributed_snapshot": distributed_snapshot,
-    }
+    while (time.time() - start) < duration_seconds:
+        governance = manager.adaptive_distributed_governance()
+        ecological_snapshot = manager.record_ecological_runtime_snapshot()
+        distributed_snapshot = manager.record_distributed_runtime_snapshot()
 
-    with OUTPUT_PATH.open(
-        "a",
-        encoding="utf-8",
-    ) as handle:
+        payload = {
+            "cycle": cycle,
+            "timestamp": datetime.utcnow().isoformat(),
+            "governance": governance,
+            "ecological_snapshot": ecological_snapshot,
+            "distributed_snapshot": distributed_snapshot,
+        }
 
-        handle.write(
-            json.dumps(
-                payload,
-                ensure_ascii=False,
-            )
+        with output_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False))
+            handle.write("\n")
+
+        print(
+            f"[{cycle}] "
+            f"mode={governance.get('governance_mode')} "
+            f"viability={governance.get('governance_viability_index')} "
+            f"drift={governance.get('ecological_drift_score')} "
+            f"workers={governance.get('proactive_worker_limit')}"
         )
 
-        handle.write("\n")
+        cycle += 1
+        time.sleep(interval_seconds)
 
-    print(
-        f"[{cycle}] "
-        f"mode={governance.get('governance_mode')} "
-        f"viability={governance.get('governance_viability_index')} "
-        f"drift={governance.get('ecological_drift_score')} "
-        f"workers={governance.get('proactive_worker_limit')}"
-    )
+    print("A3 longitudinal validation completed.")
+    print(f"Results stored in: {output_path}")
 
-    cycle += 1
+    return {
+        "success": True,
+        "primitive": "run_a3_longitudinal_validation",
+        "cycles_executed": cycle,
+        "output_path": str(output_path),
+        "duration_seconds": duration_seconds,
+        "interval_seconds": interval_seconds,
+        "import_side_effect_guarded": True,
+    }
 
-    time.sleep(INTERVAL_SECONDS)
 
-print("A3 longitudinal validation completed.")
-print(f"Results stored in: {OUTPUT_PATH}")
+def main():
+    return run_validation()
+
+
+if __name__ == "__main__":
+    main()

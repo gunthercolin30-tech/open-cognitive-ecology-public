@@ -191,6 +191,7 @@ class CivilizationalAttentionAllocator:
         non_closure_alignment: float = 0.92,
         resource_availability: float = 0.95,
         record_metrics: bool = False,
+        metrics_effect_context: Any = None,
     ) -> dict[str, Any]:
         self.cycle_count += 1
         population = _safe_population(population_size)
@@ -289,14 +290,14 @@ class CivilizationalAttentionAllocator:
         }
 
         if record_metrics:
-            result["metrics_recorded"] = self._record_metrics_safely(result)
+            result["metrics_recorded"] = self._record_metrics_safely(result, metrics_effect_context=metrics_effect_context)
         return result
 
-    def _record_metrics_safely(self, result: dict[str, Any]) -> bool:
+    def _record_metrics_safely(self, result: dict[str, Any], metrics_effect_context: Any = None) -> bool:
         try:
             from ontology.metrics_history_recorder import MetricsHistoryRecorder
             recorder = MetricsHistoryRecorder(root=self.root)
-            recorder.step(result, primitive=PRIMITIVE)
+            recorder.step(result, primitive=PRIMITIVE, effect_context=metrics_effect_context)
             return True
         except Exception:
             return False

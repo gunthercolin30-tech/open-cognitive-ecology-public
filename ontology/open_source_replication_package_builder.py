@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
+from ontology.governed_evidence_effect_policy import EvidenceEffectDecision, GovernedEvidenceEffectPolicy
+from ontology.governed_evidence_filesystem_bridge import GovernedEvidenceFilesystemBridge
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
+
 
 class OpenSourceReplicationPackageBuilder:
     """
@@ -34,6 +38,8 @@ class OpenSourceReplicationPackageBuilder:
         self,
         replication_package_context: Optional[Mapping[str, Any]] = None,
         persist: bool = True,
+        filesystem_context: Optional[GovernedFilesystemEffectContext] = None,
+        evidence_decisions: Optional[Mapping[str, EvidenceEffectDecision]] = None,
     ) -> Dict[str, Any]:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         context = self._collect_context(replication_package_context)
@@ -85,6 +91,22 @@ class OpenSourceReplicationPackageBuilder:
 
         materialized: Dict[str, Any] = {}
 
+        evidence_bridge = None
+        zip_remove_decision = None
+        if persist:
+            if filesystem_context is None:
+                raise RuntimeError("governed_filesystem_context_required")
+            decisions = evidence_decisions or {}
+            zip_remove_decision = decisions.get("zip_existing_remove")
+            if not isinstance(zip_remove_decision, EvidenceEffectDecision):
+                raise RuntimeError("zip_existing_remove_evidence_decision_required")
+            if zip_remove_decision.decision_id != "P162G6-EVIDENCE-132870e51fdc27f51c64b9f5":
+                raise RuntimeError("zip_existing_remove_evidence_decision_id_mismatch")
+            if zip_remove_decision.evidence_role != "UNRESOLVED_ROLE":
+                raise RuntimeError("zip_existing_remove_evidence_role_mismatch")
+            filesystem_context.begin()
+            evidence_bridge = GovernedEvidenceFilesystemBridge(GovernedEvidenceEffectPolicy(), filesystem_context)
+
         if persist:
             self.base.mkdir(parents=True, exist_ok=True)
             self.package_root.mkdir(parents=True, exist_ok=True)
@@ -106,19 +128,19 @@ class OpenSourceReplicationPackageBuilder:
             protocol_path = package_dir_path / "replication_validation_protocol.md"
             metadata_path = package_dir_path / "replication_bundle_metadata.json"
 
-            self._write_json(manifest_path, manifest)
-            self._write_json(inventory_path, inventory)
-            self._write_json(checksums_path, checksums)
+            self._write_json(manifest_path, manifest, filesystem_context)
+            self._write_json(inventory_path, inventory, filesystem_context)
+            self._write_json(checksums_path, checksums, filesystem_context)
             quickstart_path.write_text(quickstart, encoding="utf-8")
             protocol_path.write_text(protocol, encoding="utf-8")
-            self._write_json(metadata_path, metadata)
+            self._write_json(metadata_path, metadata, filesystem_context)
 
             # Recompute checksums after final files exist.
             checksums = self._compute_checksums(package_dir_path)
-            self._write_json(checksums_path, checksums)
+            self._write_json(checksums_path, checksums, filesystem_context)
 
             package_zip_path = self.package_root / f"{package_dir_path.name}.zip"
-            self._zip_directory(package_dir_path, package_zip_path)
+            self._zip_directory(package_dir_path, package_zip_path, evidence_bridge, zip_remove_decision)
 
             materialized = {
                 "manifest_path": str(manifest_path),
@@ -175,7 +197,7 @@ class OpenSourceReplicationPackageBuilder:
             history_path = self.base / "open_source_replication_package_builder_history.jsonl"
             prometheus_path = self.base / "open_source_replication_package_builder.prom"
             dashboard_path = self.base / "open_source_replication_package_builder_dashboard.html"
-            self._write_json(state_path, result)
+            self._write_json(state_path, result, filesystem_context)
             with history_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(result, ensure_ascii=False) + "\n")
             prometheus_path.write_text(self._render_prometheus(result), encoding="utf-8")
@@ -605,7 +627,7 @@ class OpenSourceReplicationPackageBuilder:
         return "python3 -m validation.main" in combined or "validation.main" in combined
 
     def _run_git_tags_count(self) -> int:
-        import subprocess
+        from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
         try:
             cp = subprocess.run(["git", "tag", "-l"], cwd=str(self.root), capture_output=True, text=True, timeout=5)
             if cp.returncode == 0:
@@ -615,7 +637,7 @@ class OpenSourceReplicationPackageBuilder:
         return 0
 
     def _run_git_remotes(self) -> str:
-        import subprocess
+        from ontology.governed_git_exact_process import governed_git_subprocess as subprocess
         try:
             cp = subprocess.run(["git", "remote", "-v"], cwd=str(self.root), capture_output=True, text=True, timeout=5)
             if cp.returncode == 0:
@@ -641,9 +663,12 @@ class OpenSourceReplicationPackageBuilder:
             return ""
         return ""
 
-    def _write_json(self, path: Path, payload: Mapping[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    def _write_json(self, path: Path, payload: Mapping[str, Any], filesystem_context: Optional[GovernedFilesystemEffectContext]) -> None:
+        if filesystem_context is None:
+            raise RuntimeError("governed_filesystem_context_required_for_json_write")
+        data = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+        filesystem_context.execute_path(slot="json_parent_create", operation_id="FS_CREATE_DIR", path=path.parent)
+        filesystem_context.execute_path(slot="json_write", operation_id="FS_WRITE_BYTES", path=path, payload=data)
 
     def _compute_checksums(self, package_dir: Path) -> Dict[str, Any]:
         entries = []
@@ -663,9 +688,26 @@ class OpenSourceReplicationPackageBuilder:
                 h.update(chunk)
         return h.hexdigest()
 
-    def _zip_directory(self, source_dir: Path, zip_path: Path) -> None:
+    def _zip_directory(self, source_dir: Path, zip_path: Path, evidence_bridge: Optional[GovernedEvidenceFilesystemBridge], evidence_decision: Optional[EvidenceEffectDecision]) -> None:
         if zip_path.exists():
-            zip_path.unlink()
+            if evidence_bridge is None or evidence_decision is None:
+                raise RuntimeError("zip_existing_remove_governance_required")
+            context = evidence_bridge.filesystem_context
+            root_path = getattr(context, "root_path", None)
+            if root_path is None:
+                raise RuntimeError("filesystem_context_root_path_required")
+            root = Path(root_path).expanduser().resolve()
+            target = zip_path.expanduser()
+            if not target.is_absolute():
+                target = root / target
+            try:
+                relative = target.resolve(strict=False).relative_to(root).as_posix()
+            except ValueError as exc:
+                raise RuntimeError("zip_remove_target_outside_governed_root") from exc
+            result = evidence_bridge.execute_path(decision=evidence_decision, evidence_role=evidence_decision.evidence_role, slot="zip_existing_remove", operation_id="FS_REMOVE_FILE", path=relative)
+            if not isinstance(result, dict) or result.get("status") != "EVIDENCE_EFFECT_CONFIRMED":
+                raise RuntimeError("zip_existing_remove_not_confirmed")
+        # ZIP creation/member writes are adjacent effects, not certified by this REMOVE record.
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for p in sorted(source_dir.rglob("*")):
                 if p.is_file():
@@ -676,4 +718,4 @@ class OpenSourceReplicationPackageBuilder:
 
 
 def step() -> Dict[str, Any]:
-    return OpenSourceReplicationPackageBuilder().step()
+    return OpenSourceReplicationPackageBuilder().step(persist=False)

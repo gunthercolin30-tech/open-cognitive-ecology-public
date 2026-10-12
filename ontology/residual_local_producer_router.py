@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -91,29 +90,36 @@ class ResidualLocalProducerRouter:
             pass
         return total
 
-    def _merge_copy(self, source: Path, target: Path) -> int:
-        copied = 0
+    def _merge_copy(self, source: Path, target: Path, *, target_fs_context=None) -> int:
         if not source.exists():
-            return copied
-        if source.is_file():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-            return 1
-        for p in source.rglob("*"):
-            if not p.is_file():
-                continue
-            rel = p.relative_to(source)
-            dest = target / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(p, dest)
-            copied += 1
+            return 0
+        if target_fs_context is None:
+            raise PermissionError("producer copy requires preissued target filesystem effect context")
+        copied = self._count_files(source)
+        target_fs_context.execute_dual_path(
+            "producer_merge_copy",
+            "FS_COPY_TREE_MERGE",
+            str(target_fs_context.source_root_id),
+            target_fs_context.source_root_path,
+            source,
+            target,
+        )
         return copied
 
     def _backup_path(self, source: Path) -> Path:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         return source.with_name(source.name + f".pre_f17_4_local_backup_{stamp}")
 
-    def _route_one(self, producer_dir: str, dry_run: bool = True, force: bool = False) -> Dict[str, Any]:
+    def _route_one(
+        self,
+        producer_dir: str,
+        dry_run: bool = True,
+        force: bool = False,
+        *,
+        target_fs_context=None,
+        local_fs_context=None,
+        backup_path: Optional[Path] = None,
+    ) -> Dict[str, Any]:
         source = self.root / producer_dir
         target = self._route_target(producer_dir)
 
@@ -151,17 +157,44 @@ class ResidualLocalProducerRouter:
         if dry_run:
             return record
 
-        target.mkdir(parents=True, exist_ok=True)
+        if target_fs_context is None or local_fs_context is None:
+            raise PermissionError("producer routing requires preissued target and local filesystem effect contexts")
+        if not target_fs_context.source_root_id or target_fs_context.source_root_path is None:
+            raise RuntimeError("target filesystem effect context requires local source-root binding")
+        if source.exists():
+            if backup_path is None:
+                raise PermissionError("existing producer routing requires caller-preauthorized backup_path")
+            backup = Path(backup_path)
+            expected_prefix = source.name + ".pre_f17_4_local_backup_"
+            if backup.parent != source.parent or not backup.name.startswith(expected_prefix):
+                raise ValueError("backup_path violates residual producer backup naming contract")
+            if backup.exists() or backup.is_symlink():
+                raise FileExistsError("preauthorized backup_path already exists")
+        else:
+            backup = None
+
+        target_fs_context.execute_path("producer_target_create", "FS_CREATE_DIRS", target)
 
         copied_count = 0
-        backup = None
-
         if source.exists():
-            copied_count = self._merge_copy(source, target)
-            backup = self._backup_path(source)
-            source.rename(backup)
+            copied_count = self._merge_copy(source, target, target_fs_context=target_fs_context)
+            local_fs_context.execute_dual_path(
+                "producer_backup_move",
+                "FS_MOVE_PATH",
+                str(local_fs_context.root_id),
+                local_fs_context.root_path,
+                source,
+                backup,
+            )
 
-        source.symlink_to(target, target_is_directory=True)
+        local_fs_context.execute_dual_path(
+            "producer_symlink_create",
+            "FS_CREATE_SYMLINK",
+            str(target_fs_context.root_id),
+            target_fs_context.root_path,
+            target,
+            source,
+        )
 
         record.update({
             "status": "routed",
@@ -186,25 +219,38 @@ class ResidualLocalProducerRouter:
             "history": base / "f17_4_residual_local_producer_routing_history.jsonl",
         }
 
-    def step(self, inputs: Optional[dict] = None) -> Dict[str, Any]:
+    def step(self, inputs: Optional[dict] = None, *, target_fs_context=None, local_fs_context=None, report_fs_context=None) -> Dict[str, Any]:
         inputs = inputs or {}
+        if report_fs_context is None:
+            raise PermissionError("producer routing report persistence requires preissued filesystem effect context")
+        report_fs_context.begin()
         dry_run = bool(inputs.get("dry_run", True))
         force = bool(inputs.get("force", False))
         selected = inputs.get("producer_dirs")
+        backup_paths = inputs.get("backup_paths") or {}
 
         if selected is None:
             producer_dirs = list(self.PRODUCER_ROUTES.keys())
         else:
             producer_dirs = [str(x) for x in selected if str(x) in self.PRODUCER_ROUTES]
 
-        records = [self._route_one(p, dry_run=dry_run, force=force) for p in producer_dirs]
+        records = [
+            self._route_one(
+                p,
+                dry_run=dry_run,
+                force=force,
+                target_fs_context=target_fs_context,
+                local_fs_context=local_fs_context,
+                backup_path=Path(backup_paths[p]) if p in backup_paths else None,
+            )
+            for p in producer_dirs
+        ]
 
         summary: Dict[str, int] = {}
         for r in records:
             summary[r["status"]] = summary.get(r["status"], 0) + 1
 
         paths = self._report_paths()
-        paths["base"].mkdir(parents=True, exist_ok=True)
 
         payload = {
             "primitive": self.primitive,
@@ -220,9 +266,9 @@ class ResidualLocalProducerRouter:
             "epistemic_boundary": "functional_storage_routing_only_no_phenomenal_subjectivity_claim",
         }
 
-        paths["state"].write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        with paths["history"].open("a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        report_fs_context.execute_path("producer_report_dir_create", "FS_CREATE_DIRS", paths["base"])
+        report_fs_context.execute_path("producer_report_state_replace", "FS_WRITE_REPLACE_BYTES", paths["state"], json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"))
+        report_fs_context.execute_path("producer_report_history_append", "FS_APPEND_BYTES", paths["history"], (json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8"))
 
         return {
             "primitive": self.primitive,

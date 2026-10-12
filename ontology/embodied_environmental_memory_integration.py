@@ -82,15 +82,24 @@ def _load_json(path: Path, default: Any) -> Any:
     return default
 
 
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+def _write_json(path: Path, payload: Any, *, filesystem_context: Any, slot: str) -> None:
+    if filesystem_context is None:
+        raise RuntimeError('governed_filesystem_context_required')
+    filesystem_context.execute_path(slot=slot + '_parent', operation_id='FS_CREATE_DIR', path=path.parent)
+    filesystem_context.execute_path(
+        slot=slot, operation_id='FS_WRITE_REPLACE_BYTES', path=path,
+        payload=json.dumps(payload, ensure_ascii=False, indent=2).encode('utf-8'),
+    )
 
 
-def _append_jsonl(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('a', encoding='utf-8') as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + '\n')
+def _append_jsonl(path: Path, payload: Any, *, filesystem_context: Any, slot: str) -> None:
+    if filesystem_context is None:
+        raise RuntimeError('governed_filesystem_context_required')
+    filesystem_context.execute_path(slot=slot + '_parent', operation_id='FS_CREATE_DIR', path=path.parent)
+    filesystem_context.execute_path(
+        slot=slot, operation_id='FS_APPEND_BYTES', path=path,
+        payload=(json.dumps(payload, ensure_ascii=False, sort_keys=True) + '\n').encode('utf-8'),
+    )
 
 
 def _event_type(event: dict[str, Any]) -> str:
@@ -287,7 +296,7 @@ class EmbodiedEnvironmentalMemoryIntegration:
         score = (route_integrity + retrieval_integrity + longitudinal_factor + severity_coverage) / 4.0
         return round(score, 6)
 
-    def step(self, inputs: Any = None, persist: bool = True) -> dict[str, Any]:
+    def step(self, inputs: Any = None, persist: bool = True, *, filesystem_context: Any = None) -> dict[str, Any]:
         self._cycle_counter += 1
         normalised = self._normalise_inputs(inputs)
         records = self._build_memory_records(normalised)
@@ -343,15 +352,16 @@ class EmbodiedEnvironmentalMemoryIntegration:
         }
 
         if persist:
-            self._persist(result, index, retrieval)
+            if filesystem_context is None:
+                raise RuntimeError('governed_filesystem_context_required')
+            self._persist(result, index, retrieval, filesystem_context=filesystem_context)
         return result
 
-    def _persist(self, result: dict[str, Any], index: dict[str, Any], retrieval: dict[str, Any]) -> None:
-        self.memory_dir.mkdir(parents=True, exist_ok=True)
-        _append_jsonl(self.history_path, result)
-        _write_json(self.latest_path, result)
-        _write_json(self.index_path, index)
-        _write_json(self.retrieval_path, retrieval)
+    def _persist(self, result: dict[str, Any], index: dict[str, Any], retrieval: dict[str, Any], *, filesystem_context: Any) -> None:
+        _append_jsonl(self.history_path, result, filesystem_context=filesystem_context, slot='environmental_history_append')
+        _write_json(self.latest_path, result, filesystem_context=filesystem_context, slot='environmental_latest_write')
+        _write_json(self.index_path, index, filesystem_context=filesystem_context, slot='environmental_index_write')
+        _write_json(self.retrieval_path, retrieval, filesystem_context=filesystem_context, slot='environmental_retrieval_write')
 
         if result.get('integrated_memory_records', 0) > 0:
             try:
@@ -366,7 +376,10 @@ class EmbodiedEnvironmentalMemoryIntegration:
                         'environmental_memory_consolidation_score': result.get('environmental_memory_consolidation_score'),
                         'latest_path': result.get('latest_path'),
                     },
+                    filesystem_context=filesystem_context,
                 )
+            except RuntimeError:
+                raise
             except Exception:
                 pass
 

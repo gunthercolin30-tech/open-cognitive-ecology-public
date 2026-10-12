@@ -19,10 +19,26 @@ class ExternalValidationDashboard:
     primitive = "external_validation_dashboard"
     refinement = "H0.4-R1"
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Optional[Path] = None, filesystem_effect_context_provider=None) -> None:
         self.root = Path(root) if root is not None else ROOT
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
         self.base = self.root / "external_validation"
         self.out_dir = self.base / "external_validation_dashboard"
+
+    def _governed_write_replace(self, path: Path, payload: bytes, slot: str) -> None:
+        provider = self.filesystem_effect_context_provider
+        if not callable(provider):
+            raise RuntimeError("filesystem_effect_context_provider_required")
+        context = provider("FS_WRITE_REPLACE_BYTES", path, slot)
+        if context is None:
+            raise RuntimeError("preissued_filesystem_effect_context_required")
+        context.begin()
+        remaining = context.remaining()
+        if remaining.get(slot, 0) != 1 or sum(remaining.values()) != 1:
+            raise RuntimeError("exactly_one_write_replace_authority_required")
+        context.execute_path(slot, "FS_WRITE_REPLACE_BYTES", path, payload=payload)
+        if any(context.remaining().values()):
+            raise RuntimeError("write_replace_authority_not_fully_consumed")
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -188,7 +204,7 @@ class ExternalValidationDashboard:
         for key, metric in metric_map.items():
             lines.append(f"# TYPE {metric} gauge")
             lines.append(f"{metric} {scores[key]:.6f}")
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self._governed_write_replace(path, ("\n".join(lines) + "\n").encode("utf-8"), "macro04_external_validation_prometheus")
 
     def _write_html(self, path: Path, result: Dict[str, Any]) -> None:
         scores = result["component_scores"]
@@ -226,7 +242,7 @@ H0.2 replication readiness and H0.3 scientific publication traceability without 
 </body>
 </html>
 """
-        path.write_text(html, encoding="utf-8")
+        self._governed_write_replace(path, html.encode("utf-8"), "macro04_external_validation_html")
 
     def _write_grafana_json(self, path: Path) -> None:
         dashboard = {
@@ -256,7 +272,7 @@ H0.2 replication readiness and H0.3 scientific publication traceability without 
                 },
             ],
         }
-        path.write_text(json.dumps(dashboard, indent=2, sort_keys=True), encoding="utf-8")
+        self._governed_write_replace(path, json.dumps(dashboard, indent=2, sort_keys=True).encode("utf-8"), "macro04_external_validation_grafana")
 
     def step(
         self,

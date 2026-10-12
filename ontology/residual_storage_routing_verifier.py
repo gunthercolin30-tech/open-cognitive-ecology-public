@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ontology.governed_filesystem_effect_context import GovernedFilesystemEffectContext
+
 
 ROOT = Path.home() / "open-cognitive-ecology"
 DEFAULT_SSD_ROOT = Path(os.environ.get("OCE_SSD_ROOT", "/Volumes/OCE_SSD"))
@@ -195,7 +197,7 @@ class ResidualStorageRoutingVerifier:
             backups.append(item)
         return sorted(backups, key=lambda x: x["path"])
 
-    def step(self, inputs: Optional[dict] = None) -> Dict[str, Any]:
+    def step(self, inputs: Optional[dict] = None, filesystem_effect_context: Optional[GovernedFilesystemEffectContext] = None) -> Dict[str, Any]:
         inputs = inputs or {}
         persist_probe = bool(inputs.get("persist_probe", True))
         selected = inputs.get("producer_dirs")
@@ -241,11 +243,23 @@ class ResidualStorageRoutingVerifier:
         }
 
         base = self._report_base()
-        base.mkdir(parents=True, exist_ok=True)
         state_path = base / "f17_5_residual_storage_routing_verification_state.json"
         history_path = base / "f17_5_residual_storage_routing_verification_history.jsonl"
 
-        state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if not isinstance(filesystem_effect_context, GovernedFilesystemEffectContext):
+            raise RuntimeError("governed filesystem effect context required")
+        expected_root = self.ssd_root if self._ssd_available() else self.root
+        if filesystem_effect_context.root_path.resolve() != expected_root.resolve():
+            raise RuntimeError("governed filesystem effect context root mismatch")
+        expected_slots = {"report_parent_create": 1, "state_write": 1}
+        if filesystem_effect_context.remaining() != expected_slots:
+            raise RuntimeError("filesystem effect slot cardinality mismatch")
+        filesystem_effect_context.begin()
+        filesystem_effect_context.execute_path("report_parent_create", "FS_CREATE_DIRS", base)
+        state_bytes = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+        filesystem_effect_context.execute_path("state_write", "FS_WRITE_REPLACE_BYTES", state_path, state_bytes)
+        if any(filesystem_effect_context.remaining().values()):
+            raise RuntimeError("unconsumed filesystem effect handles")
         with history_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
 

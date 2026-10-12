@@ -6,10 +6,13 @@ import json
 import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from ontology.governed_evidence_effect_policy import EvidenceEffectDecision, GovernedEvidenceEffectPolicy
+from ontology.governed_evidence_filesystem_bridge import GovernedEvidenceFilesystemBridge
 
 
 PRIMITIVE = "metrics_statistical_significance_engine"
+P162G6_EVIDENCE_ROLE = "PERSISTENT_STATISTICAL_EVIDENCE_JSON_TRANSACTION"
 
 DEPENDENCIES = [
     "metrics_aggregation_engine",
@@ -41,8 +44,20 @@ class MetricsStatisticalSignificanceEngine:
         self.alpha = float(alpha)
         self.minimum_samples = int(minimum_samples)
 
-    def step(self, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        self.metrics_dir.mkdir(parents=True, exist_ok=True)
+    def step(self, inputs: Optional[Dict[str, Any]] = None, *, filesystem_context=None, evidence_decisions: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+        if filesystem_context is None: raise RuntimeError("governed_filesystem_context_required")
+        if not isinstance(evidence_decisions, Mapping): raise RuntimeError("governed_evidence_decisions_required")
+        output_decision=evidence_decisions.get("output_write"); state_decision=evidence_decisions.get("state_write"); parent_decisions=evidence_decisions.get("parent_create",())
+        if not isinstance(output_decision,EvidenceEffectDecision): raise RuntimeError("output_write_evidence_decision_required")
+        if not isinstance(state_decision,EvidenceEffectDecision): raise RuntimeError("state_write_evidence_decision_required")
+        if not isinstance(parent_decisions,Sequence) or isinstance(parent_decisions,(str,bytes,bytearray)): raise RuntimeError("parent_create_evidence_decisions_sequence_required")
+        if any(not isinstance(x,EvidenceEffectDecision) for x in parent_decisions): raise RuntimeError("parent_create_evidence_decision_required")
+        parent_chain=self._p162g6_missing_parent_chain(filesystem_context,self.metrics_dir)
+        if len(parent_decisions)!=len(parent_chain): raise RuntimeError("parent_create_evidence_decision_cardinality_mismatch")
+        filesystem_context.begin(); bridge=GovernedEvidenceFilesystemBridge(GovernedEvidenceEffectPolicy(),filesystem_context)
+        for parent,decision in zip(parent_chain,parent_decisions):
+            out=bridge.execute_path(decision=decision,evidence_role=P162G6_EVIDENCE_ROLE,slot="metrics_parent_create",operation_id="FS_CREATE_DIR",path=self._p162g6_relative_effect_path(filesystem_context,parent))
+            if out.get("status")!="EVIDENCE_EFFECT_CONFIRMED": raise RuntimeError("governed_metrics_parent_create_not_confirmed")
 
         aggregation_summary = self._load_json(self.summary_path)
         aggregations = aggregation_summary.get("aggregations", {}) if isinstance(aggregation_summary, dict) else {}
@@ -112,15 +127,9 @@ class MetricsStatisticalSignificanceEngine:
             "error_count": 0,
         }
 
-        self._save_json(self.output_path, result)
-        self._save_json(self.state_path, {
-            "primitive": PRIMITIVE,
-            "last_run": result["timestamp"],
-            "metric_count": analyzed_metric_count,
-            "statistical_support_ratio": support_ratio,
-            "error_count": 0,
-        })
-
+        self._save_json(self.output_path,result,bridge=bridge,decision=output_decision,slot="significance_summary_write")
+        self._save_json(self.state_path,{"primitive":PRIMITIVE,"last_run":result["timestamp"],"metric_count":analyzed_metric_count,"statistical_support_ratio":support_ratio,"error_count":0},bridge=bridge,decision=state_decision,slot="significance_state_write")
+        if any(filesystem_context.remaining().values()): raise RuntimeError("unused_filesystem_effect_authority")
         return result
 
     def _analyze_metric(
@@ -351,12 +360,33 @@ class MetricsStatisticalSignificanceEngine:
         except Exception:
             return {}
 
-    def _save_json(self, path: Path, payload: Dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        with open(tmp, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-        tmp.replace(path)
+    @staticmethod
+    def _p162g6_relative_effect_path(filesystem_context,path: Path) -> Path:
+        root_path=getattr(filesystem_context,"root_path",None)
+        if root_path is None: raise RuntimeError("governed_filesystem_root_path_required")
+        root=Path(root_path).expanduser().resolve(); target=Path(path).expanduser(); target=(target if target.is_absolute() else root/target).resolve()
+        try: return target.relative_to(root)
+        except ValueError as exc: raise RuntimeError("governed_filesystem_path_outside_root") from exc
+
+    @staticmethod
+    def _p162g6_missing_parent_chain(filesystem_context,directory: Path) -> List[Path]:
+        root_path=getattr(filesystem_context,"root_path",None)
+        if root_path is None: raise RuntimeError("governed_filesystem_root_path_required")
+        root=Path(root_path).expanduser().resolve(); target=Path(directory).expanduser(); target=(target if target.is_absolute() else root/target).resolve()
+        try: rel=target.relative_to(root)
+        except ValueError as exc: raise RuntimeError("governed_filesystem_path_outside_root") from exc
+        chain=[]; current=root
+        for part in rel.parts:
+            current=current/part
+            if current.exists():
+                if not current.is_dir(): raise RuntimeError("metrics_parent_component_not_directory")
+            else: chain.append(current)
+        return chain
+
+    def _save_json(self,path: Path,payload: Dict[str,Any],*,bridge: GovernedEvidenceFilesystemBridge,decision: EvidenceEffectDecision,slot: str) -> None:
+        data=json.dumps(payload,indent=2,sort_keys=True).encode("utf-8")
+        out=bridge.execute_path(decision=decision,evidence_role=P162G6_EVIDENCE_ROLE,slot=slot,operation_id="FS_WRITE_REPLACE_BYTES",path=self._p162g6_relative_effect_path(bridge.filesystem_context,path),payload=data)
+        if out.get("status")!="EVIDENCE_EFFECT_CONFIRMED": raise RuntimeError("governed_statistical_evidence_write_not_confirmed")
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")

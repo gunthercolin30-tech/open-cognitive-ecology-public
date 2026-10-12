@@ -18,10 +18,26 @@ DEPENDENCIES = [
 
 
 class CivilizationalWebDashboard:
-    def __init__(self, output_path: str = "civilizational_dashboard.html") -> None:
+    def __init__(self, output_path: str = "civilizational_dashboard.html", filesystem_effect_context_provider=None) -> None:
         self.primitive = PRIMITIVE
         self.output_path = Path(output_path)
         self.persistence = CivilizationalStatePersistence()
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
+
+    def _governed_write_replace(self, path: Path, payload: bytes, slot: str) -> None:
+        provider = self.filesystem_effect_context_provider
+        if not callable(provider):
+            raise RuntimeError("filesystem_effect_context_provider_required")
+        context = provider("FS_WRITE_REPLACE_BYTES", path, slot)
+        if context is None:
+            raise RuntimeError("preissued_filesystem_effect_context_required")
+        context.begin()
+        remaining = context.remaining()
+        if remaining.get(slot, 0) != 1 or sum(remaining.values()) != 1:
+            raise RuntimeError("exactly_one_write_replace_authority_required")
+        context.execute_path(slot, "FS_WRITE_REPLACE_BYTES", path, payload=payload)
+        if any(context.remaining().values()):
+            raise RuntimeError("write_replace_authority_not_fully_consumed")
 
     def step(self) -> dict:
         load_result = self.persistence.load()
@@ -52,7 +68,7 @@ class CivilizationalWebDashboard:
             + "</table></body></html>"
         )
 
-        self.output_path.write_text(html, encoding="utf-8")
+        self._governed_write_replace(self.output_path, html.encode("utf-8"), "macro04_civilizational_web_dashboard")
 
         return {
             "primitive": self.primitive,

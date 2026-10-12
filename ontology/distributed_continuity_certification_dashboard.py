@@ -68,12 +68,21 @@ class DistributedContinuityCertificationDashboard:
     subjectivity claim.
     '''
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Optional[Path] = None, filesystem_effect_context_provider=None) -> None:
         self.root = Path(root) if root else ROOT
+        self.filesystem_effect_context_provider = filesystem_effect_context_provider
         self.continuity_root = _continuity_root()
         self.cert_root = self.continuity_root / "certifications"
         self.dashboard_root = _dashboard_root()
-        self.dashboard_root.mkdir(parents=True, exist_ok=True)
+        if not self.dashboard_root.exists():
+            provider = self.filesystem_effect_context_provider
+            if provider is None or not callable(provider):
+                raise RuntimeError("filesystem_effect_context_provider_required")
+            context = provider("FS_CREATE_DIRS", self.dashboard_root)
+            if context is None:
+                raise RuntimeError("preissued_filesystem_effect_context_required")
+            context.begin()
+            context.execute_path("dashboard_root", "FS_CREATE_DIRS", self.dashboard_root)
         self.dashboard_path = self.dashboard_root / "distributed_continuity_certification_dashboard.html"
 
     def _read_jsonl(self, path: Path, limit: int = 100) -> List[Dict[str, Any]]:

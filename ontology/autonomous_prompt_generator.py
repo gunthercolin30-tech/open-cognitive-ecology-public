@@ -42,14 +42,18 @@ class AutonomousPromptGenerator:
         root: Path | None = None,
         history_file: Path | None = None,
         max_context_chars: int = 2400,
-    ) -> None:
+     filesystem_effect_context=None) -> None:
         self.root = Path(root) if root is not None else Path.home() / "open-cognitive-ecology"
         self.history_file = (
             Path(history_file)
             if history_file is not None
             else self.root / "autonomous_prompt_history.jsonl"
         )
-        self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        if filesystem_effect_context is None:
+            raise PermissionError('filesystem parent creation requires preissued filesystem effect context')
+        if not self.history_file.parent.exists():
+            filesystem_effect_context.begin()
+            filesystem_effect_context.execute_path('init_parent_create', 'FS_CREATE_DIR', self.history_file.parent)
         self.max_context_chars = max(400, int(max_context_chars))
 
     def _utc_now(self) -> str:

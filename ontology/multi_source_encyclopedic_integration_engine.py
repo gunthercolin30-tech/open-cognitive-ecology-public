@@ -10,19 +10,27 @@ from __future__ import annotations
 
 import json
 import urllib.parse
-import urllib.request
+from ontology.governed_network_effector import GovernedNetworkEffector, GovernedNetworkRequest, UrllibTrustedTransport
 
 
 class MultiSourceEncyclopedicIntegrationEngine:
     USER_AGENT = "OpenCognitiveEcology/1.0"
 
+    def __init__(self, governed_network_context=None):
+        self.governed_network_context = governed_network_context
+
+    def set_governed_network_context(self, context):
+        self.governed_network_context = context
+
     def _get_json(self, url: str):
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": self.USER_AGENT},
-        )
-        with urllib.request.urlopen(request, timeout=20) as response:
-            return json.loads(response.read().decode("utf-8"))
+        ctx = self.governed_network_context
+        if not isinstance(ctx, dict) or ctx.get("handle") is None: raise PermissionError("governed_network_context_required")
+        effector = ctx.get("effector") or GovernedNetworkEffector(transport=UrllibTrustedTransport(), credential_resolver=ctx.get("credential_resolver"))
+        result = effector.execute(request=GovernedNetworkRequest("GET", url, {"User-Agent": self.USER_AGENT}, timeout_seconds=20.0, idempotent=True), handle=ctx.get("handle"), brokered_use=ctx.get("brokered_use"), adapter_id=ctx.get("adapter_id"), effector_id=ctx.get("effector_id"), now_iso=ctx.get("now_iso"))
+        if result.get("status") != "EFFECT_CONFIRMED": raise PermissionError("governed_network_effect_blocked:"+str(result.get("reason")))
+        payload=(result.get("transport_result") or {}).get("body")
+        if not isinstance(payload,(bytes,bytearray)): raise RuntimeError("governed_network_response_body_missing")
+        return json.loads(bytes(payload).decode("utf-8"))
 
     def query_wikipedia(self, term: str):
         params = urllib.parse.urlencode({

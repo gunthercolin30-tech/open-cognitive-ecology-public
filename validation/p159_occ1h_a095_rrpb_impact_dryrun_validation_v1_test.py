@@ -1,0 +1,5 @@
+from ontology.occ1h_a095_rrpb_impact_dryrun_validation import state
+def test_functional(): r=state(); assert r["rrp5"]=="IMPACT_SURFACE_MAPPED" and r["rrp6"]=="DRY_RUN_ALL_PRODUCTS_VALID" and r["rrp7"]=="SINGLE_TRANSACTIONAL_INSTALL_COMPLETE" and r["rrp8"]=="VALIDATION_FUNNEL_READY_AND_LOCAL_PASSED"
+def test_impact(): r=state(); assert r["impact_surface"]==["provider_evidence_provenance","theory_revision_binding","policy_constitutional_acceptance_binding","cross_layer_end_to_end_provenance"] and r["dry_run_all_products_valid"]
+def test_degradation(): r=state(); assert r["qualification"]=="END_TO_END_PROVENANCE_PATH_NOT_MATERIALIZED" and not r["end_to_end_provider_theory_policy_provenance_path_materialized"] and r["current_verdict"]=="INCONCLUSIVE"
+def test_nonregression(): r=state(); assert r["root"] and r["structural_group"]=="G6_CROSS_LAYER_PROVENANCE" and not r["production_runtime_modified"] and not r["criticality_changed"] and not r["occ1h_closed"] and not r["p159_final_lock"] and not r["p160_opened"]

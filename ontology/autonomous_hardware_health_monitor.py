@@ -7,11 +7,11 @@ import platform
 import re
 import shutil
 import socket
-import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
+from ontology.governed_local_system_probe import probe_text
 
 
 class AutonomousHardwareHealthMonitor:
@@ -65,14 +65,9 @@ class AutonomousHardwareHealthMonitor:
     @staticmethod
     def _safe_run(command: list[str], timeout: float = 2.0) -> str:
         try:
-            completed = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-            return (completed.stdout or completed.stderr or "").strip()
+            if not command:
+                return ""
+            return probe_text(command[0], *command[1:], timeout_seconds=timeout)
         except Exception:
             return ""
 
