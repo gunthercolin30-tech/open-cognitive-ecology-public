@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/oce-symbol-monochrome.svg" alt="Open Cognitive Ecology — OCE emblem" width="220">
+  <img src="assets/branding/oce-logo-3d.png" alt="Open Cognitive Ecology — logo 3D" width="280">
 </p>
 
 # Open Cognitive Ecology
