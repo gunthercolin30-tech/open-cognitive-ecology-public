@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<title>OCE — symbole monochrome vectoriel</title>
+<g fill="none" stroke="#F3F5FA" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+<path d="M256 30 C141 30 79 147 79 274 C79 400 152 480 256 480 C360 480 433 400 433 274 C433 147 371 30 256 30 Z"/>
+<path d="M256 91 C170 91 125 181 125 275 C125 372 179 426 256 426 C333 426 387 372 387 275 C387 181 342 91 256 91 Z"/>
+<path d="M316 154 C263 154 231 210 231 279 C231 345 265 390 316 390 C359 390 384 349 384 298"/>
+<path d="M291 253 L307 247 L320 252 L336 244 L350 251 L372 247"/>
+<path d="M291 316 L307 310 L320 315 L336 307 L350 314 L372 310"/>
+</g></svg>
