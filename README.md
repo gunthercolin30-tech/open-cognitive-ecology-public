@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/branding/oce-symbol-monochrome.svg" alt="Open Cognitive Ecology — OCE emblem" width="220">
+</p>
+
 # Open Cognitive Ecology
 
 Open Cognitive Ecology is an experimental research framework for persistent
