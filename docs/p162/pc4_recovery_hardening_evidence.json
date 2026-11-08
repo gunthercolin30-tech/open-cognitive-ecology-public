@@ -1,0 +1,71 @@
+{
+  "schema": "oce.p162.pc4.recovery-hardening.v1",
+  "public_base_commit": "c0255142ad32cfc7c5b4a54347bee8282d0cb1fb",
+  "original_module_sha256": "cdbac9f7725cd70db5e1efe00865577df08d91676be8f3132bc5be55d21bfdf7",
+  "protected_files_sha256": {
+    "ontology/reservation_recovery_manager.py": "3a5144c8bde374a6e1aebc9564dd819d9f5ed8d2720083506a6d3decfd1702a8",
+    "tests/test_p162_pc4_recovery_hardening.py": "f8c5b924964623c5d808790543a43e2efdb21f3fd5ca2c6918018c3dbe387569",
+    "tools/refine_reservation_recovery_manager_p162_pc4.py": "da14a39ca440b04f3451851179cd2278808b44fb5d3b7935ea98f99db0f61b45",
+    "p162_pc4_recovery_final_lock.py": "2f252eb21752e2e3e6f410203c8d5c5bbd1e31c0e9b7376725a82ec1f1070bac",
+    "reservation_recovery_manager_fast_acceptance_suite.py": "d96fc36c1ec532a65349f82543c2993bf5ffed93c1dbb773d073ebff21a9a379"
+  },
+  "original_counterexamples": {
+    "null_record": "AttributeError",
+    "confirmed_then_committed": {
+      "state": "RESERVED",
+      "assessment": "CONFIRMED_USED"
+    }
+  },
+  "new_tests_passed": 17,
+  "existing_f5_f6_f7_tests_passed": 43,
+  "existing_pc4_script_suites": [
+    "p162_pc4_bound_restart_dispatch_gate_test",
+    "p162_pc4_durable_reconstruction_authority_test",
+    "p162_pc4_concurrent_positive_recovery_test",
+    "p162_pc4_effect_recovery_boundary_test"
+  ],
+  "mutation_probes": [
+    {
+      "id": "duplicate_key_guard_removed",
+      "status": "KILLED",
+      "source_sha256": "5e27ad2ae89df0c10d5bcdb9f395b7b9354192c6987beefcba4111fc887485ca",
+      "summary": "FAILED (failures=1)"
+    },
+    {
+      "id": "incomplete_record_guard_removed",
+      "status": "KILLED",
+      "source_sha256": "d179293a4a4e3bd42a68e451d0ad469c845ed328e2cf534c259a55da7aae3400",
+      "summary": "FAILED (failures=1)"
+    },
+    {
+      "id": "terminal_state_guard_removed",
+      "status": "KILLED",
+      "source_sha256": "7a77c8dcd6bd51671071b27070a08bf4f88aeb6940fb3cb52bebc5e24cbeb6b6",
+      "summary": "FAILED (failures=2)"
+    }
+  ],
+  "installer_checks": [
+    "check-only",
+    "verified backup",
+    "idempotent install",
+    "source drift refused",
+    "partial failure rollback",
+    "default home root",
+    "existing final_lock dispatcher",
+    "final payload installation and acceptance"
+  ],
+  "executed_python": "3.12.14",
+  "python39_syntax": "PASS",
+  "macos_execution": "NOT_RUN",
+  "scope": "Journal integrity, conservative state reconstruction, existing PC4 no-replay recovery paths. No new right is issued.",
+  "limitations": [
+    "No multi-writer atomicity certification",
+    "No old-backup continuity guarantee without an independent protected checkpoint",
+    "No admission authority or recovery resume authorization",
+    "PC4 canonical acceptance remains HOLD",
+    "P162 global Final Lock NOT_EXECUTED"
+  ],
+  "authorization_created": false,
+  "functional_conclusion_only": true,
+  "phenomenology_undetermined": true
+}
