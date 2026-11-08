@@ -1,0 +1,24 @@
+{
+  "schema": "oce.p162.pc405.targeted-collection-check.v1",
+  "base_commit": "3a75872aae3f30acd30c5eeefadae1c98789cddd",
+  "collector_sha256": "a97ef3e5db0786ce988518845fe46d0f22f7db15187f17b45e17618f51f24509",
+  "existing_integrated_authority_tests_passed": 23,
+  "reason_for_collection": "Supplied institutional packet requires human institutional decision and references four unavailable OCC1A source documents. Inspect current records before changing protected admission; no authorization inferred.",
+  "collector_checks": [
+    "bash syntax",
+    "Python 3.9 syntax",
+    "spaces in project/output paths",
+    "11-path exact allowlist",
+    "missing path reporting",
+    "sensitive JSON exclusion",
+    "symlink exclusion",
+    "unchanged source SHA deduplication",
+    "ZIP CRC integrity",
+    "two runs without overwrite",
+    "no source mutation",
+    "in-project destination refused"
+  ],
+  "reads_private_system_configuration": false,
+  "authority_created": false,
+  "p162_final_lock_executed": false
+}
