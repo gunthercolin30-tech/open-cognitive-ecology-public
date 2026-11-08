@@ -1,0 +1,28 @@
+{
+  "schema": "oce.p162.existing-human-keys.collector-checks.v1",
+  "collector_sha256": "f3c1a027a5260b2c9a3fc0c764c16dae9d73a6aa98689bd1c2aaa5cb4d51a8b7",
+  "purpose": "Recover already-used public human keys, historical signed evidence, public trust enrolment and revocation states; no key generation or authority promotion.",
+  "scope": [
+    "governance JSON with relevant names",
+    "governance public PEM/OpenSSH keys",
+    "governance SQLite projection of three literal public-trust tables",
+    "top-level OCE named JSON/public-key evidence in Downloads"
+  ],
+  "checks_passed": [
+    "shell syntax",
+    "Python 3.9 syntax",
+    "spaces in paths",
+    "public key inclusion",
+    "signed JSON inclusion",
+    "private key rejection",
+    "secret JSON rejection",
+    "SQLite WAL-aware temporary snapshot",
+    "fixed public-table projection",
+    "no raw database in archive",
+    "original project bytes unchanged",
+    "ZIP CRC"
+  ],
+  "historical_founder_pin_already_present": "c624fa20f52f6aeda325b150234390e3acc1769731c5c299a212e89386301399",
+  "authority_created": false,
+  "private_keys_required": false
+}
