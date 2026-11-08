@@ -1,0 +1,75 @@
+{
+  "schema": "oce.p162.g5.replay-hardening.evidence.v1",
+  "public_base_commit": "f10174e6b4e52e9d2f87163f70da6c70b8c2d126",
+  "supplied_original_sha256": "7fdc3b9878cd3bb00074281e36ac1986a0739e377b09f4c29c38ecb87c975543",
+  "original_counterexample": {
+    "first_key": "EFFECT_CONFIRMED",
+    "changed_key": "EFFECT_CONFIRMED",
+    "observed_effect_count": 2
+  },
+  "protected_files_sha256": {
+    "ontology/governed_effector_adapter.py": "90c3687bf2a658798171048d8d764e2c7de05ad1ad42d82cd96bfa4b6ad6a793",
+    "tests/test_p162_g5_replay_hardening.py": "e8f4fa3ab8a2f8a6f543a1f6e2dbeb72161bb6b7cf9ea7e63e3a7bb86325af94",
+    "p162_g5_replay_final_lock.py": "fb09f48039dc0f4b05b4fd1c937cbe82ca13e1de658d21e001de56a74b009814",
+    "governed_effector_adapter_fast_acceptance_suite.py": "cdc3406886161ec6013f563c5bf7e70424dca9040fe90df6930ec302c23ef879",
+    "tools/refine_governed_effector_adapter_p162_g5_replay.py": "7e293850876371689356fbdd30f78cf56859f82b4ac7b05c623e4733e244a8df"
+  },
+  "new_unittest_cases_passed": 12,
+  "existing_g1_g5_tests_passed": 64,
+  "existing_tests_not_run": [
+    {
+      "test": "test_f_manifest_still_matches",
+      "reason": "validation_artifacts/p162/p162f/protected_manifest.json absent from supplied inputs; excluded explicitly, not PASS"
+    }
+  ],
+  "mutation_probes": [
+    {
+      "case": "original_uploaded_adapter",
+      "status": "KILLED",
+      "exit_code": 1,
+      "mutated_source_sha256": "7fdc3b9878cd3bb00074281e36ac1986a0739e377b09f4c29c38ecb87c975543",
+      "summary": "FAILED (failures=35, errors=2)"
+    },
+    {
+      "case": "disable_lease_guard",
+      "status": "KILLED",
+      "exit_code": 1,
+      "mutated_source_sha256": "f6f8595239713b9ef8151846a30980e5d284316657c3f7fd62aaa52d5691b506",
+      "summary": "FAILED (failures=1)"
+    },
+    {
+      "case": "disable_reservation_guard",
+      "status": "KILLED",
+      "exit_code": 1,
+      "mutated_source_sha256": "48b91cbde2b1833a1f729395846425b449e1801e2461d762999fa71314eb195d",
+      "summary": "FAILED (failures=1)"
+    },
+    {
+      "case": "disable_binding_checks",
+      "status": "KILLED",
+      "exit_code": 1,
+      "mutated_source_sha256": "b18727209e7d77d77050d9a11b08d6334a94f6b1c7af75551ab176161e173645",
+      "summary": "FAILED (failures=6)"
+    }
+  ],
+  "installer_checks": [
+    "check-only no mutation",
+    "exact-source guard",
+    "idempotent second install",
+    "verified original backup",
+    "source drift refused",
+    "partial-write rollback",
+    "default HOME root",
+    "existing final_lock.py dispatcher"
+  ],
+  "compatibility": {
+    "executed_python": "3.12.14",
+    "python_39_syntax_check": "PASS",
+    "macos_execution": "NOT_RUN"
+  },
+  "scope": "One GovernedEffectorAdapter object in one process; synthetic injected effects. No claim for restart, adapter recreation, multihost or authenticated admission.",
+  "global_p162_status": "NOT_FINAL_LOCKED",
+  "authorization_created": false,
+  "functional_conclusion_only": true,
+  "phenomenology_undetermined": true
+}
